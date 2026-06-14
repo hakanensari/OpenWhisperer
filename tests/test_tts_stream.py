@@ -64,6 +64,22 @@ def test_produce_stops_immediately_when_cancelled():
     lock.release()
 
 
+def test_produce_terminal_sentinel_put_does_not_block_forever():
+    # ONE segment, queue size 1, NEVER drained: segment 0 fills the queue, then
+    # generation completes and the producer reaches the terminal SENTINEL put with a
+    # full queue. With cancel set, it must NOT block forever (regression: unbounded put).
+    q = queue.Queue(maxsize=1)
+    ev = threading.Event()
+    lock = threading.Lock()
+    segs = [np.array([0.0], np.float32)]
+    t = threading.Thread(target=ts.produce, args=(_gen(segs), q, ev, lock), daemon=True)
+    t.start()
+    time.sleep(0.3)   # segment buffered (queue full); producer now at terminal SENTINEL put
+    ev.set()          # cancel — must unblock the terminal put
+    t.join(timeout=2)
+    assert not t.is_alive()   # producer returned; no infinite block
+
+
 def test_produce_backpressure_does_not_hold_lock():
     q = queue.Queue(maxsize=1)
     ev = threading.Event()

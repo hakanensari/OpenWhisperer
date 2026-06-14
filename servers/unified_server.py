@@ -416,6 +416,11 @@ async def tts_stream(payload: SpeechRequest):
             ref_audio=payload.ref_audio, ref_text=payload.ref_text,
             temperature=payload.temperature, top_p=payload.top_p, top_k=payload.top_k,
             repetition_penalty=payload.repetition_penalty,
+            # Split on sentence boundaries (keeping the punctuation) so a single-line
+            # multi-sentence response streams per sentence instead of as one blob —
+            # this is what actually delivers low time-to-first-audio. Kokoro's default
+            # split_pattern is r"\n+", under which a newline-free VOICE tag is 1 segment.
+            split_pattern=r"(?<=[.!?])\s+",
         )
         produce(gen, q, cancel_event, _mlx_gpu_lock)
 

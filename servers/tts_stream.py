@@ -26,10 +26,21 @@ def produce(gen, q, cancel_event, lock, *, gpu_timeout=30, put_timeout=0.2):
     """Drive `gen` (a model.generate() iterator) one segment at a time.
 
     For each segment: acquire `lock`, pull the next segment (synthesis happens on
-    `next()`), release `lock`, then enqueue the segment's PCM bytes (blocking with
-    a timeout so we stay responsive to `cancel_event` even when the queue is full).
-    Terminates by putting SENTINEL — unless cancelled, in which case it returns
-    without a sentinel (the drain side sets cancel_event on disconnect)."""
+    `next()`), release `lock`, then enqueue the segment's PCM bytes. Every enqueue —
+    including the terminal SENTINEL — uses a cancel-aware bounded put, so the producer
+    never blocks forever (even if the client disconnected and nobody is draining a full
+    queue). On normal completion a SENTINEL is always enqueued via `finally`; on cancel
+    it is skipped (the drain side has already stopped)."""
+    def _put(item):
+        # Bounded, cancel-aware blocking put. Returns False if cancelled while full.
+        while True:
+            try:
+                q.put(item, timeout=put_timeout)
+                return True
+            except queue.Full:
+                if cancel_event.is_set():
+                    return False
+
     try:
         while True:
             if cancel_event.is_set():
@@ -47,18 +58,12 @@ def produce(gen, q, cancel_event, lock, *, gpu_timeout=30, put_timeout=0.2):
                     lock.release()
             if cancel_event.is_set():
                 return
-            data = pcm_bytes(result.audio)
-            while True:
-                try:
-                    q.put(data, timeout=put_timeout)
-                    break
-                except queue.Full:
-                    if cancel_event.is_set():
-                        return
-        q.put(SENTINEL)
+            if not _put(pcm_bytes(result.audio)):
+                return
     except Exception:
         logger.exception("TTS producer failed")
-        try:
-            q.put(SENTINEL, timeout=1)
-        except queue.Full:
-            pass
+    finally:
+        # Always signal end-of-stream so the drain side terminates — unless we were
+        # cancelled (drain already gone). Bounded so it can't hang on a full queue.
+        if not cancel_event.is_set():
+            _put(SENTINEL)
