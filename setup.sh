@@ -3,6 +3,8 @@
 # Creates a uv venv with all dependencies for STT + TTS on Apple Silicon
 
 set -e
+# pipefail: a failing `curl ... | sh` (e.g. uv install) must abort, not pass silently (QW.4)
+set -o pipefail
 
 VENV_PATH="${1:-$HOME/mlx-openai-whisper}"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"

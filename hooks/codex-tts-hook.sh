@@ -132,17 +132,38 @@ fi
   MODEL="${TTS_MODEL:-prince-canuma/Kokoro-82M}"
   TMPFILE=$(mktemp "$TTS_TMPDIR/tts_XXXXXXXXXXXX") || { rm -f "$LOCKFILE"; exit 1; }
 
+  TTS_OK=false
+  CURL_RC=0
   for attempt in 1 2 3; do
     curl -s -X POST "$TTS_URL" \
       -H "Content-Type: application/json" \
       -d "$(jq -n --arg t "$SPEECH" --arg v "$VOICE" --arg m "$MODEL" '{model: $m, input: $t, voice: $v}')" \
       --output "$TMPFILE" --max-time 30 2>/dev/null
-    if [ -s "$TMPFILE" ] && head -c 4 "$TMPFILE" | grep -q "RIFF"; then break; fi
+    CURL_RC=$?
+    if [ "$CURL_RC" -eq 0 ] && [ -s "$TMPFILE" ] && head -c 4 "$TMPFILE" | grep -q "RIFF"; then
+      TTS_OK=true
+      break
+    fi
     sleep 1
   done
 
-  if [ -s "$TMPFILE" ]; then
-    afplay -v 4 "$TMPFILE" 2>/dev/null
+  # Log a diagnostic if every attempt failed — parity with tts-hook.sh (review)
+  if [ "$TTS_OK" = "false" ]; then
+    logger -t codex-tts-hook "TTS request failed after 3 attempts (last curl rc=$CURL_RC, url=$TTS_URL)"
+  fi
+
+  # Read volume from app config, fall back to env var, then default — parity with tts-hook.sh (QW.5)
+  VOLUME_FILE="$APP_SUPPORT/tts_volume"
+  if [ -f "$VOLUME_FILE" ] && [ ! -L "$VOLUME_FILE" ]; then
+    SAVED_VOLUME=$(cat "$VOLUME_FILE" 2>/dev/null | tr -d '[:space:]')
+    VOLUME="${SAVED_VOLUME:-${TTS_VOLUME:-1}}"
+  else
+    VOLUME="${TTS_VOLUME:-1}"
+  fi
+
+  # Only play validated audio (TTS_OK) so a truncated/RIFF-ish partial body never reaches afplay (review)
+  if [ "$TTS_OK" = "true" ] && [ -s "$TMPFILE" ]; then
+    afplay -v "$VOLUME" "$TMPFILE" 2>/dev/null
   fi
   rm -f "$LOCKFILE"
   rm -f "$TMPFILE" 2>/dev/null

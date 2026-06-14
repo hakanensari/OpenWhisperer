@@ -104,8 +104,10 @@ def focus_target_app():
             if not re.match(r'^[A-Za-z0-9 ._-]+$', app_name):
                 logger.warning("Blocked suspicious auto-focus app name: %r", app_name)
                 return
+        # Use `open -a` with app_name as a separate argv element (no shell / AppleScript
+        # string interpolation) — removes the injection vector. Matches unified_server.py.
         subprocess.Popen(
-            ["osascript", "-e", f'tell application "{app_name}" to activate'],
+            ["open", "-a", app_name],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )

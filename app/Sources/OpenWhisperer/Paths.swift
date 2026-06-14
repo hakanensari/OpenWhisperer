@@ -96,6 +96,13 @@ enum Paths {
 
     /// Ensure directories exist
     static func ensureDirectories() {
-        try? FileManager.default.createDirectory(at: appSupport, withIntermediateDirectories: true)
+        // Owner-only perms — the support dir holds config + logs read by the local server (T2.5)
+        try? FileManager.default.createDirectory(
+            at: appSupport,
+            withIntermediateDirectories: true,
+            attributes: [.posixPermissions: 0o700]
+        )
+        // Tighten perms on a dir created by an older version (e.g. 0755 -> 0700)
+        try? FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: appSupport.path)
     }
 }

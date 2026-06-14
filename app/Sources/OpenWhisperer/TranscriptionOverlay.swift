@@ -12,6 +12,10 @@ class TranscriptionOverlay: NSObject, NSWindowDelegate, ObservableObject {
     private var window: NSWindow?
     private var fileHandle: FileHandle?
     private var source: DispatchSourceFileSystemObject?
+    /// Serial queue for the log-tailing source. A serial target queue guarantees the
+    /// event handler and the cancel handler (which closes the FileHandle) never run
+    /// concurrently, so a queued read can't hit a closed handle during teardown (T1.1/H-4).
+    private let tailQueue = DispatchQueue(label: "com.openwhisperer.overlay.tail", qos: .utility)
 
     struct Line: Identifiable {
         let id: Int
@@ -172,7 +176,7 @@ class TranscriptionOverlay: NSObject, NSWindowDelegate, ObservableObject {
         let src = DispatchSource.makeFileSystemObjectSource(
             fileDescriptor: fd,
             eventMask: [.write, .extend],
-            queue: .global(qos: .utility)
+            queue: tailQueue
         )
 
         src.setEventHandler { [weak self] in

@@ -132,8 +132,17 @@ class SetupManager: ObservableObject {
 
             updateState(.inProgress("Finishing up..."), progress: 0.9)
 
-            // Mark setup complete (only after all steps + smoke test pass)
-            try? "done".write(to: Paths.setupComplete, atomically: true, encoding: .utf8)
+            // Mark setup complete (only after all steps + smoke test pass).
+            // If the marker can't be persisted the environment still works for THIS session,
+            // so we log rather than fail; next launch will re-run setup idempotently (T2.2).
+            do {
+                try "done".write(to: Paths.setupComplete, atomically: true, encoding: .utf8)
+                if !FileManager.default.fileExists(atPath: Paths.setupComplete.path) {
+                    NSLog("Setup complete-marker write reported success but file is missing — setup will re-run next launch")
+                }
+            } catch {
+                NSLog("Setup succeeded but failed to write completion marker (\(Paths.setupComplete.path)): \(error) — setup will re-run next launch")
+            }
 
             updateState(.complete, progress: 1.0)
             DispatchQueue.main.async {
@@ -167,7 +176,10 @@ class SetupManager: ObservableObject {
         process.arguments = args
 
         var env = ProcessInfo.processInfo.environment
-        env["PATH"] = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
+        // Prepend brew paths but PRESERVE the user's existing PATH so pyenv/conda/MacPorts/
+        // Intel-Homebrew Python installs are still found during setup (T1.5).
+        let basePath = env["PATH"] ?? "/usr/bin:/bin:/usr/sbin:/sbin"
+        env["PATH"] = "/opt/homebrew/bin:/usr/local/bin:\(basePath)"
         process.environment = env
 
         let logFile = FileHandle.forWritingOrCreate(at: Paths.setupLog)

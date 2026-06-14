@@ -40,6 +40,7 @@ class DictationManager: ObservableObject {
     private var originPID: pid_t = 0
 
     private var recorderSink: AnyCancellable?
+    private var engineErrorSink: AnyCancellable?
     private var uploadWatchdog: DispatchWorkItem?
     private var activeUploadTask: URLSessionDataTask?
     /// True while a barge-in recording is active — prevents handleTTSStateChange from resetting to keyword mode
@@ -53,6 +54,13 @@ class DictationManager: ObservableObject {
             .receive(on: RunLoop.main)
             .sink { [weak self] newState in
                 self?.recorderState = newState
+            }
+
+        // Surface audio-engine failures to the UI instead of failing silently (T2.3)
+        engineErrorSink = recorder.$engineError
+            .receive(on: RunLoop.main)
+            .sink { [weak self] err in
+                if let err { self?.error = err }
             }
 
         // Wire keyword detector
@@ -125,6 +133,9 @@ class DictationManager: ObservableObject {
             if recorder.state == .listening || recorder.state == .recording || recorder.state == .uploading {
                 uploadWatchdog?.cancel()
                 uploadWatchdog = nil
+                // Cancel any in-flight upload so its completion can't type into the wrong app (T1.2)
+                activeUploadTask?.cancel()
+                activeUploadTask = nil
                 recorder.stopEngine()
             }
         }
@@ -208,6 +219,9 @@ class DictationManager: ObservableObject {
         dispatchPrecondition(condition: .onQueue(.main))
         uploadWatchdog?.cancel()
         uploadWatchdog = nil
+        // Cancel any in-flight upload so its completion can't type into the wrong app (T1.2)
+        activeUploadTask?.cancel()
+        activeUploadTask = nil
         recorder.silenceDetectionEnabled = false
         keywordDetector.stop()
         stopTTSLockMonitoring()
@@ -282,6 +296,7 @@ class DictationManager: ObservableObject {
         activeUploadTask = uploadToWhisper(wavData: wavData, language: language, port: currentPort, handsFree: true) { [weak self] result in
             guard let self else { return }
             DispatchQueue.main.async {
+                self.activeUploadTask = nil
                 self.uploadWatchdog?.cancel()
                 self.uploadWatchdog = nil
 
@@ -296,7 +311,9 @@ class DictationManager: ObservableObject {
                         self.insertText(trimmed, intoPID: pid, forceSubmit: true) { [weak self] in
                             guard let self else { return }
                             self.isTyping = false
-                            // Resume listening after typing completes
+                            // Only resume hands-free listening if still in hands-free mode (T1.4):
+                            // the user may have switched to PTT/hold while this upload was in flight.
+                            guard self.interactionMode == .handsFree else { return }
                             self.recorder.resumeListening()
                             self.keywordDetector.start()
                         }
@@ -304,10 +321,14 @@ class DictationManager: ObservableObject {
                     }
                 case .failure(let err):
                     os_log(.default, log: dictLog, "HF upload failed: %{public}@", err.localizedDescription)
-                    self.error = err.localizedDescription
+                    // Don't surface a user-initiated cancellation (mode switch) as an error (review)
+                    if (err as NSError).code != NSURLErrorCancelled {
+                        self.error = err.localizedDescription
+                    }
                 }
 
-                // Resume listening on empty result or failure
+                // Resume listening on empty result or failure — only if still hands-free (T1.4)
+                guard self.interactionMode == .handsFree else { return }
                 self.recorder.resumeListening()
                 self.keywordDetector.start()
             }
@@ -431,9 +452,10 @@ class DictationManager: ObservableObject {
                 return
             }
 
-            self.uploadToWhisper(wavData: wavData, language: language, port: currentPort) { [weak self] result in
+            let task = self.uploadToWhisper(wavData: wavData, language: language, port: currentPort) { [weak self] result in
                 guard let self else { return }
                 DispatchQueue.main.async {
+                    self.activeUploadTask = nil
                     self.uploadWatchdog?.cancel()
                     self.uploadWatchdog = nil
                     self.recorder.reset()
@@ -451,8 +473,19 @@ class DictationManager: ObservableObject {
                         }
                     case .failure(let err):
                         os_log(.default, log: dictLog, "Upload failed: %{public}@", err.localizedDescription)
-                        self.error = err.localizedDescription
+                        // Don't surface a user-initiated cancellation (mode switch) as an error (review)
+                        if (err as NSError).code != NSURLErrorCancelled {
+                            self.error = err.localizedDescription
+                        }
                     }
+                }
+            }
+            // Store the task on main so the watchdog / mode-switch can cancel a hung PTT upload (T1.3).
+            // Guard on state so a fast completion (which resets to .idle and nils the task) can't be
+            // clobbered by a late assignment of an already-finished task (review).
+            DispatchQueue.main.async {
+                if self.recorder.state == .uploading {
+                    self.activeUploadTask = task
                 }
             }
         }

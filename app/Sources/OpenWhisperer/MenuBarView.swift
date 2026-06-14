@@ -939,6 +939,8 @@ struct MenuBarView: View {
     private func saveFocusApp() {
         guard autoFocusEnabled, !focusAppName.isEmpty else { return }
         try? focusAppName.write(to: Paths.autoFocusApp, atomically: true, encoding: .utf8)
+        // Owner-only — the target app name is read by the local server (T2.5)
+        try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: Paths.autoFocusApp.path)
     }
 
     private func debouncedSaveFocusApp() {

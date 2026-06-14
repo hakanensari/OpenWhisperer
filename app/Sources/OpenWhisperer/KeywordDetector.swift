@@ -173,6 +173,9 @@ class KeywordDetector: ObservableObject {
         requestLock.unlock()
         isRunning = false
         lastProcessedText = ""
+        // Clear any deferred start so a late permission callback can't auto-restart
+        // detection after the user explicitly stopped hands-free (QW.1).
+        pendingStart = false
         kwLog("Stopped")
     }
 

@@ -1,6 +1,9 @@
 import AVFoundation
 import AppKit
 import Combine
+import os.log
+
+private let audioLog = OSLog(subsystem: "com.openwhisperer.app", category: "audio")
 
 /// Records microphone audio, provides real-time RMS levels for waveform,
 /// and exports 16kHz 16-bit mono WAV data for Whisper transcription.
@@ -16,6 +19,8 @@ class AudioRecorder: ObservableObject {
     @Published var audioLevel: Float = 0.0
     @Published var levelHistory: [Float] = Array(repeating: 0, count: 50)
     @Published var micPermission: Bool = false
+    /// Set when the audio engine fails to configure or start, so the UI can surface it (T2.3).
+    @Published var engineError: String?
     /// True when audio level is below silence threshold (hands-free mode)
     @Published var isSilent: Bool = true
 
@@ -196,6 +201,9 @@ class AudioRecorder: ObservableObject {
         let hwFormat = inputNode.outputFormat(forBus: 0)
 
         guard let conv = AVAudioConverter(from: hwFormat, to: targetFormat) else {
+            os_log(.error, log: audioLog, "AVAudioConverter init failed (hwFormat=%{public}@)", "\(hwFormat)")
+            self.engine = nil
+            engineError = "Could not configure microphone input — unsupported audio format"
             state = .idle
             return
         }
@@ -234,7 +242,10 @@ class AudioRecorder: ObservableObject {
 
         do {
             try engine.start()
+            engineError = nil  // clear any stale failure from a previous attempt (review)
         } catch {
+            os_log(.error, log: audioLog, "AVAudioEngine start failed: %{public}@", error.localizedDescription)
+            engineError = "Microphone failed to start — check input device and Microphone permission"
             cleanup()
         }
     }

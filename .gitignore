@@ -19,9 +19,6 @@ venv/
 CACHEDIR.TAG
 .lock
 
-# Legacy root-level hook (real one is in hooks/)
-/tts-hook.sh
-
 # IDE
 *.xcodeproj
 *.xcworkspace

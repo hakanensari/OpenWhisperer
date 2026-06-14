@@ -16,7 +16,7 @@ The command to bypass Gatekeeper for the DMG:
 xattr -cr /Applications/Open\ Whisperer.app
 
 If you want to do it on the DMG itself before opening:
-xattr -d com.apple.quarantine ~/Downloads/OpenWhisperer-1.3.3.dmg
+xattr -d com.apple.quarantine ~/Downloads/OpenWhisperer-1.4.0.dmg
 
 
 ## What It Does
@@ -27,7 +27,7 @@ Everything runs on your Mac — no cloud APIs, no data leaves your machine.
 
 ## Install
 
-[**Download OpenWhisperer-1.3.3.dmg**](https://github.com/PerIPan/OpenWhisperer/releases/download/v1.3.3/OpenWhisperer-1.3.3.dmg) — drag to Applications and launch.
+[**Download OpenWhisperer-1.4.0.dmg**](https://github.com/PerIPan/OpenWhisperer/releases/download/v1.4.0/OpenWhisperer-1.4.0.dmg) — drag to Applications and launch.
 
 On first launch, the app:
 - Creates a Python environment with all dependencies
@@ -248,7 +248,7 @@ chmod +x build-dmg.sh
 ./build-dmg.sh
 ```
 
-Requires Xcode Command Line Tools. Produces `Open Whisperer.app` and `OpenWhisperer-1.3.3.dmg` in `app/.build/`.
+Requires Xcode Command Line Tools. Produces `Open Whisperer.app` and `OpenWhisperer-1.4.0.dmg` in `app/.build/`.
 
 ## File Structure
 

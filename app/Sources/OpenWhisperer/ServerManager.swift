@@ -233,26 +233,25 @@ class ServerManager: ObservableObject {
 
     // MARK: - Process Management
 
-    /// Waits for process to exit after terminate(). Must NOT be called on main thread (T-1).
+    /// Terminates `process` and waits (bounded) for it to exit, escalating to SIGKILL.
+    ///
+    /// The synchronous path runs this inline on the caller — which at app quit is the main
+    /// thread (applicationWillTerminate). Blocking there is intentional and unavoidable: the
+    /// child Python server is NOT auto-reaped when our process exits, so we must guarantee it
+    /// dies before returning. The wait is bounded to ~2s (SIGTERM grace) before SIGKILL to
+    /// avoid a long hang at quit (T2.1).
     private static func waitForTermination(_ process: Process?, pidFile: URL) {
         guard let proc = process, proc.isRunning else {
             try? FileManager.default.removeItem(at: pidFile)
             return
         }
-        proc.terminate()
-        for _ in 0..<30 {
+        proc.terminate()  // SIGTERM — uvicorn shuts down promptly
+        for _ in 0..<20 {  // ~2s grace
             if !proc.isRunning { break }
             Thread.sleep(forTimeInterval: 0.1)
         }
         if proc.isRunning {
-            proc.interrupt()
-            for _ in 0..<10 {
-                if !proc.isRunning { break }
-                Thread.sleep(forTimeInterval: 0.1)
-            }
-        }
-        if proc.isRunning {
-            kill(proc.processIdentifier, SIGKILL)
+            kill(proc.processIdentifier, SIGKILL)  // guaranteed reap
         }
         try? FileManager.default.removeItem(at: pidFile)
     }
@@ -266,7 +265,8 @@ class ServerManager: ObservableObject {
         process = nil
         proc.terminate()
         if synchronous {
-            // Run termination inline on current thread (H-5: avoid semaphore blocking main thread)
+            // Run termination inline (bounded ~2s). At quit this is the main thread by design —
+            // we must reap the child server before the app exits (see waitForTermination, T2.1).
             Self.waitForTermination(proc, pidFile: pidFile)
         } else {
             DispatchQueue.global(qos: .utility).async {
@@ -292,7 +292,10 @@ class ServerManager: ObservableObject {
     private func makeEnv() -> [String: String] {
         var env = ProcessInfo.processInfo.environment
         let venvBin = Paths.venv.appendingPathComponent("bin").path
-        env["PATH"] = "\(venvBin):/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
+        // Prepend venv + brew paths but PRESERVE the user's existing PATH so pyenv/conda/
+        // MacPorts/Intel-Homebrew installs remain discoverable (T1.5).
+        let basePath = env["PATH"] ?? "/usr/bin:/bin:/usr/sbin:/sbin"
+        env["PATH"] = "\(venvBin):/opt/homebrew/bin:/usr/local/bin:\(basePath)"
         env["VIRTUAL_ENV"] = Paths.venv.path
         return env
     }

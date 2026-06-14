@@ -123,16 +123,27 @@ esac
   TMPFILE=$(mktemp "$TTS_TMPDIR/tts_XXXXXXXXXXXX") || { rm -f "$LOCKFILE"; exit 1; }
 
   # Retry TTS up to 3 times
+  TTS_OK=false
+  CURL_RC=0
   for attempt in 1 2 3; do
     curl -s -X POST "$TTS_URL" \
       -H "Content-Type: application/json" \
       -d "$(jq -n --arg t "$SPEECH" --arg v "$VOICE" --arg m "$MODEL" '{model: $m, input: $t, voice: $v}')" \
       --output "$TMPFILE" --max-time 30 2>/dev/null
-    # Validate response is audio (WAV starts with RIFF), not a JSON error
+    CURL_RC=$?
+    # Require curl success AND a valid WAV header (RIFF) — not a JSON error or truncated body.
     # Validate WAV header using dd (avoids forking head|grep pipeline) (#11)
-    if [ -s "$TMPFILE" ] && [[ "$(dd if="$TMPFILE" bs=4 count=1 2>/dev/null)" == "RIFF" ]]; then break; fi
+    if [ "$CURL_RC" -eq 0 ] && [ -s "$TMPFILE" ] && [[ "$(dd if="$TMPFILE" bs=4 count=1 2>/dev/null)" == "RIFF" ]]; then
+      TTS_OK=true
+      break
+    fi
     sleep 1
   done
+
+  # Log a diagnostic if every attempt failed — otherwise the user just gets silence (T2.4)
+  if [ "$TTS_OK" = "false" ]; then
+    logger -t tts-hook "TTS request failed after 3 attempts (last curl rc=$CURL_RC, url=$TTS_URL)"
+  fi
 
   # Read volume from app config, fall back to env var, then default
   VOLUME_FILE="$APP_SUPPORT/tts_volume"
@@ -143,7 +154,8 @@ esac
     VOLUME="${TTS_VOLUME:-1}"
   fi
 
-  if [ -s "$TMPFILE" ]; then
+  # Only play validated audio (TTS_OK) so a truncated/RIFF-ish partial body never reaches afplay (T2.4)
+  if [ "$TTS_OK" = "true" ] && [ -s "$TMPFILE" ]; then
     afplay -v "$VOLUME" "$TMPFILE" 2>/dev/null
   fi
   rm -f "$LOCKFILE"
