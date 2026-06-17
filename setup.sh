@@ -58,6 +58,8 @@ uv pip install soundfile fastapi uvicorn python-multipart webrtcvad "misaki[en]"
 
 # Make scripts executable
 chmod +x "$SCRIPT_DIR/hooks/tts-hook.sh"
+chmod +x "$SCRIPT_DIR/hooks/voice-context.sh"
+chmod +x "$SCRIPT_DIR/hooks/first-paragraph.sh"
 chmod +x "$SCRIPT_DIR/servers/start-servers.sh"
 chmod +x "$SCRIPT_DIR/scripts/speak.sh"
 
@@ -71,6 +73,13 @@ echo "3. Configure the hook in your project's .claude/settings.json:"
 echo ""
 echo '   {'
 echo '     "hooks": {'
+echo '       "UserPromptSubmit": [{'
+echo '         "hooks": [{'
+echo '           "type": "command",'
+echo "           \"command\": \"$SCRIPT_DIR/hooks/voice-context.sh\","
+echo '           "timeout": 10'
+echo '         }]'
+echo '       }],'
 echo '       "Stop": [{'
 echo '         "hooks": [{'
 echo '           "type": "command",'

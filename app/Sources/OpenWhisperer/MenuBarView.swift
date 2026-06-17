@@ -54,7 +54,7 @@ struct MenuBarView: View {
     @State private var selectedVolume = "medium"
     @State private var selectedVoice = "af_heart"
     @State private var selectedLanguage = "en"
-    @State private var selectedDetail = "natural"
+    @State private var selectedDetail = "normal"
     @State private var showStoppedBanner = false
     @State private var pttKeyChanged = false
     @State private var selectedPlatform: Platform = .claudeCode
@@ -113,10 +113,9 @@ struct MenuBarView: View {
     ]
 
     private static let detailLevels: [(id: String, label: String)] = [
-        ("brief", "Brief"),
-        ("natural", "Natural"),
-        ("detailed", "Detailed"),
-        ("brainstorming", "Brainstorming"),
+        ("terse", "Terse"),
+        ("normal", "Normal"),
+        ("rich", "Rich"),
     ]
 
     private static let volumeLevels: [(id: String, label: String, value: String)] = [

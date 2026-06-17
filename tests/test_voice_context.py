@@ -82,3 +82,11 @@ def test_terse_detail_changes_nudge(tmp_path):
         tmp_path, voice_turn_text="go", detail="terse",
     )
     assert "one short, plain spoken sentence" in json.loads(out)["hookSpecificOutput"]["additionalContext"]
+
+
+def test_rich_detail_changes_nudge(tmp_path):
+    out, _ = run_hook(
+        {"prompt": "go", "session_id": "s1"},
+        tmp_path, voice_turn_text="go", detail="rich",
+    )
+    assert "a sentence or two" in json.loads(out)["hookSpecificOutput"]["additionalContext"]
