@@ -59,7 +59,6 @@ struct MenuBarView: View {
     @State private var pttKeyChanged = false
     @State private var selectedPlatform: Platform = .claudeCode
     @State private var hookApplied = false
-    @State private var voiceHookApplied = false
     @State private var superpowersApplied = false
     @State private var applyMessage = ""
     @State private var serverReachable = false
@@ -708,7 +707,6 @@ struct MenuBarView: View {
                 // Diagnostics
                 VStack(alignment: .leading, spacing: 4) {
                     ModernDiagnosticRow(label: "HOOK configured", ok: hookApplied)
-                    ModernDiagnosticRow(label: "voice hook installed", ok: voiceHookApplied)
                     if selectedPlatform == .claudeCode {
                         ModernDiagnosticRow(label: "superpowers installed", ok: superpowersApplied)
                     }
@@ -892,7 +890,6 @@ struct MenuBarView: View {
 
     private func refreshDiagnostics() {
         hookApplied = ConfigManager.checkHookConfigured(for: selectedPlatform)
-        voiceHookApplied = ConfigManager.checkHookConfigured(for: selectedPlatform)
         superpowersApplied = ConfigManager.checkSuperpowersInstalled()
         ConfigManager.testTTS(port: serverManager.port) { ok in
             DispatchQueue.main.async { serverReachable = ok }
