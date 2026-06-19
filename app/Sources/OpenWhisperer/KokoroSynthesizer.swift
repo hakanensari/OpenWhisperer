@@ -2,14 +2,14 @@ import Foundation
 import FluidAudio
 import OpenWhispererKit
 
-/// In-process Kokoro text-to-speech via FluidAudio (CoreML / ANE).
+/// In-process Kokoro text-to-speech via FluidAudio (CoreML / ANE). One of the
+/// `SpeechSynthesizer` backends (the shipped default; English voice + voice picker).
 ///
-/// Replaces the out-of-process Python `mlx_audio` server. Actor-isolated so the one-time
-/// model load can't race and synthesis calls serialize on the compute unit. Mirrors the
-/// `SpeechTranscriber` pattern (in-flight load dedup, error wrapping). FluidAudio caches
-/// its CoreML chain under `~/.cache/fluidaudio` and loads from cache when present, so an
-/// already-downloaded model survives a blocked/slow Hub (offline-first by construction).
-actor KokoroTTS {
+/// Actor-isolated so the one-time model load can't race and synthesis calls serialize on the
+/// compute unit. FluidAudio caches its CoreML chain under `~/.cache/fluidaudio` and loads from
+/// cache when present, so an already-downloaded model survives a blocked/slow Hub (offline-first
+/// by construction).
+actor KokoroSynthesizer: SpeechSynthesizer {
     enum KokoroTTSError: LocalizedError {
         case loadFailed(String)
         var errorDescription: String? {
@@ -21,6 +21,9 @@ actor KokoroTTS {
 
     /// US-English female voice — the same default the Python Kokoro path used.
     static let defaultVoice = "af_heart"
+
+    /// Kokoro renders at 24 kHz mono.
+    nonisolated let outputSampleRate = 24_000
 
     private let manager = KokoroAneManager(variant: .english)
     private var loaded = false

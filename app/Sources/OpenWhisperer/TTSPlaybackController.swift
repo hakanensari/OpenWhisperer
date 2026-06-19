@@ -2,21 +2,25 @@ import Foundation
 import OpenWhispererKit
 
 /// Orchestrates in-process TTS playback: splits text into sentences, synthesizes each via
-/// `KokoroTTS`, and schedules them onto a gapless `AudioPlaybackEngine` so the first sentence plays
+/// the active `SpeechSynthesizer`, and schedules them onto a gapless `AudioPlaybackEngine` so the first sentence plays
 /// while later ones synthesize. Owns the `tts_playing.lock` file the app polls for the "Speaking…"
 /// state (overlay waveform + hands-free mic-muting). Barge-in cancels pending synthesis — freeing
 /// the ANE for STT — and stops audio instantly.
 actor TTSPlaybackController {
-    private let tts: KokoroTTS
-    private let engine = AudioPlaybackEngine()
+    private var tts: any SpeechSynthesizer
+    private var engine: AudioPlaybackEngine
     private var playTask: Task<Void, Never>?
 
     /// Bumped on every `play`/`bargeIn` so stale drain/synth callbacks are ignored.
     private var generation = 0
     private var synthDone = false
 
-    init(tts: KokoroTTS) {
+    init(tts: any SpeechSynthesizer) {
         self.tts = tts
+        // The synthesizer's output rate is fixed for this controller's lifetime, so size the
+        // playback engine to it up front (Kokoro 24 kHz, Supertonic3 44.1 kHz). The mixer
+        // resamples to the hardware device.
+        self.engine = AudioPlaybackEngine(sampleRate: Double(tts.outputSampleRate))
     }
 
     /// Speak `text`, superseding any current playback.
@@ -50,6 +54,15 @@ actor TTSPlaybackController {
             }
             self.synthFinished(gen: gen)
         }
+    }
+
+    /// Swap the active synthesizer and resize the playback engine to its output rate. Stops
+    /// any current playback first. Called when the user changes the TTS engine; the controller
+    /// object itself stays stable so `DictationManager`'s barge-in reference remains valid.
+    func setSynthesizer(_ synth: any SpeechSynthesizer) {
+        bargeIn()
+        tts = synth
+        engine = AudioPlaybackEngine(sampleRate: Double(synth.outputSampleRate))
     }
 
     /// Stop playback and cancel pending synthesis immediately (barge-in / supersede).

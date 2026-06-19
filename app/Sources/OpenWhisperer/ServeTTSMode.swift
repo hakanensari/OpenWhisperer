@@ -1,11 +1,12 @@
 import Foundation
+import OpenWhispererKit
 
-/// Headless native-TTS server mode (`OpenWhisperer --serve-tts`). Starts `KokoroTTS` +
-/// `TTSHTTPServer` on :8000 and blocks — no GUI, no setup manager. Useful for testing the
-/// native TTS path with `curl` and for CI; the real GUI hosts the same pieces via `ServerManager`.
+/// Headless native-TTS server mode (`OpenWhisperer --serve-tts`). Starts the `tts_engine`-selected
+/// `SpeechSynthesizer` + `TTSHTTPServer` on :8000 and blocks — no GUI, no setup manager. Useful for
+/// testing the native TTS path with `curl` and for CI; the real GUI hosts the same pieces via `ServerManager`.
 enum ServeTTSMode {
     static func run() {
-        let tts = KokoroTTS()
+        let tts = ServerManager.makeSynthesizer(TTSEngine.load())
         let playback = TTSPlaybackController(tts: tts)
         let port = UInt16(ProcessInfo.processInfo.environment["TTS_PORT"] ?? "") ?? 8000
         let server = TTSHTTPServer(port: port, tts: tts, playback: playback)

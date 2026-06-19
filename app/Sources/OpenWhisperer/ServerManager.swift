@@ -1,9 +1,11 @@
 import Foundation
 import Combine
+import OpenWhispererKit
 
-/// Hosts the in-process native TTS: a `KokoroTTS` actor (FluidAudio CoreML/ANE) behind a
-/// tiny embedded HTTP server (`TTSHTTPServer`) on :8000. Replaces the out-of-process Python
-/// `unified_server.py`. STT is native in-app (`SpeechTranscriber`) and needs no server.
+/// Hosts the in-process native TTS: a `SpeechSynthesizer` actor (FluidAudio CoreML/ANE, Kokoro
+/// or Supertonic3 per the `tts_engine` pref) behind a tiny embedded HTTP server
+/// (`TTSHTTPServer`) on :8000. Replaces the out-of-process Python `unified_server.py`. STT is
+/// native in-app and needs no server.
 class ServerManager: ObservableObject {
     enum ServerStatus: String {
         case stopped = "Stopped"
@@ -18,15 +20,46 @@ class ServerManager: ObservableObject {
     @Published var ttsModel: String = "Kokoro-82M"              // native FluidAudio
     @Published var lastError: String = ""
 
-    private let tts = KokoroTTS()
+    /// Active TTS backend, selected by the `tts_engine` pref. `var` so `reloadTTSEngine()`
+    /// can swap it; used for the blocking `/v1/audio/speech` path and (via `playback`) streaming.
+    private var tts: any SpeechSynthesizer
+    private var currentTTSEngine: TTSEngine
     /// In-process TTS playback (Phase 3). Shared with `DictationManager` (via `AppDelegate`) for
-    /// instant barge-in, and with `TTSHTTPServer` to serve `/v1/audio/play`.
+    /// instant barge-in, and with `TTSHTTPServer` to serve `/v1/audio/play`. The object is stable
+    /// across engine changes (it swaps its synthesizer internally) so the injected reference stays valid.
     let playback: TTSPlaybackController
     private var httpServer: TTSHTTPServer?
     private var prepareTask: Task<Void, Never>?
 
     init() {
-        playback = TTSPlaybackController(tts: tts)
+        let engine = TTSEngine.load()
+        let synth = ServerManager.makeSynthesizer(engine)
+        currentTTSEngine = engine
+        tts = synth
+        playback = TTSPlaybackController(tts: synth)
+        ttsModel = engine.label
+    }
+
+    /// Build the synthesizer backend for a TTS engine.
+    static func makeSynthesizer(_ engine: TTSEngine) -> any SpeechSynthesizer {
+        switch engine {
+        case .kokoro: return KokoroSynthesizer()
+        case .supertonic3: return Supertonic3Synthesizer()
+        }
+    }
+
+    /// Called from the menu when the user picks a different TTS engine. Swaps the synthesizer in
+    /// the (stable) playback controller, rebuilds the HTTP server with it, and reloads the model.
+    /// No-op if the saved engine is unchanged. Main thread.
+    func reloadTTSEngine() {
+        let chosen = TTSEngine.load()
+        guard chosen != currentTTSEngine else { return }
+        currentTTSEngine = chosen
+        let synth = ServerManager.makeSynthesizer(chosen)
+        tts = synth
+        ttsModel = chosen.label
+        Task { await playback.setSynthesizer(synth) }
+        restartAll()
     }
 
     var isRunning: Bool { status == .running }

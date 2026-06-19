@@ -11,12 +11,12 @@ import Network
 /// One request per connection (`Connection: close`), which is all `curl` (the hook) needs.
 final class TTSHTTPServer {
     private let port: NWEndpoint.Port
-    private let tts: KokoroTTS
+    private let tts: any SpeechSynthesizer
     private let playback: TTSPlaybackController
     private let queue = DispatchQueue(label: "tts.http.server")
     private var listener: NWListener?
 
-    init(port: UInt16, tts: KokoroTTS, playback: TTSPlaybackController) {
+    init(port: UInt16, tts: any SpeechSynthesizer, playback: TTSPlaybackController) {
         self.port = NWEndpoint.Port(rawValue: port)!
         self.tts = tts
         self.playback = playback
