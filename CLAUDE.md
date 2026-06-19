@@ -58,18 +58,20 @@ Conventional Commits, matching the existing history: `type(scope): subject`, whe
 ### Targets (`app/Package.swift`)
 
 - **`OpenWhispererKit`** — pure, dependency-free, fast-to-test logic: `SentenceSplitter`, `NumberNormalizer`, `SubmitTrigger`, `VoiceSignal`, `VoiceMigration`, `PCMConversion`.
-- **`OpenWhisperer`** — the executable (AppKit/SwiftUI menubar app + native STT/TTS). Depends on `WhisperKit` (STT) and `FluidAudio` (TTS).
+- **`OpenWhisperer`** — the executable (AppKit/SwiftUI menubar app + native STT/TTS). Depends on `WhisperKit` and `FluidAudio` (both back STT *and* TTS now — the engines are user-selectable).
 - **`OpenWhispererKitTests`**, **`HookTests`** — the two executable test runners above.
 
 Entry point `OpenWhispererMain.main()`: `--serve-tts` → headless TTS; otherwise the SwiftUI `MenuBarExtra` app. `AppDelegate` owns the long-lived managers (`ServerManager`, `SetupManager`, `DictationManager`, `HotkeyManager`, `AccessibilityManager`). The app is `LSUIElement` (menubar only, no dock icon).
 
 ### STT (dictation) — fully in-process, no server
 
-`HotkeyManager` watches a modifier key (Ctrl/fn/Option/Cmd) → `AppDelegate` captures the frontmost app's PID *before* any focus shift → `DictationManager` orchestrates: `AudioRecorder` (16 kHz mono PCM) → `SpeechTranscriber` (WhisperKit, on the ANE) → types the result into the captured app via Accessibility / CGEvent Unicode (the **clipboard is never touched**). Three `InteractionMode`s: `holdToTalk` (default), `pressToTalk`, `handsFree` (`KeywordDetector` uses Apple's Speech framework for "initiate"/"hold on").
+`HotkeyManager` watches a modifier key (Ctrl/fn/Option/Cmd) → `AppDelegate` captures the frontmost app's PID *before* any focus shift → `DictationManager` orchestrates: `AudioRecorder` (16 kHz mono PCM) → the active `Transcriber` (on the ANE) → types the result into the captured app via Accessibility / CGEvent Unicode (the **clipboard is never touched**). Three `InteractionMode`s: `holdToTalk` (default), `pressToTalk`, `handsFree` (`KeywordDetector` uses Apple's Speech framework for "initiate"/"hold on").
+
+**Pluggable STT engines.** `Transcriber` is a protocol with two conformers: `WhisperKitTranscriber` (Whisper large-v3-turbo, ~99 languages) and `FluidAudioTranscriber` (FluidAudio Parakeet v3 — 25 European langs, batch; or Nemotron-3.5 multilingual — ~40 langs incl. **Turkish**, streaming). The `stt_engine` pref selects it (default `nemotron-multilingual`); the `STTEngine`/`TTSEngine` enums + parse-with-default live in `OpenWhispererKit` (unit-tested), with `load()`/`save()` as app-target extensions. The menubar picker calls `DictationManager.reloadSTTEngine()` to hot-swap on change. (Note the model map: WhisperKit is the multilingual-breadth play; FluidAudio's Parakeet has **no Turkish**, Nemotron does.)
 
 ### TTS (spoken replies) — in-process synth + playback, thin HTTP shim for hooks
 
-`ServerManager` hosts `KokoroTTS` (FluidAudio) behind `TTSHTTPServer`, a tiny loopback-only HTTP/1.1 server on **:8000** (Network.framework, zero deps). After each AI reply, a bash hook POSTs the spoken text to `POST /v1/audio/play`; the server returns `202` immediately and `TTSPlaybackController` synthesizes **sentence-by-sentence** (`SentenceSplitter`) and plays gaplessly via `AudioPlaybackEngine` (`AVAudioPlayerNode`) — so the first sentence plays while the rest are still synthesizing. Endpoints: `GET /v1/models`, `POST /v1/audio/speech` (blocking, returns WAV — used by `scripts/speak.sh`), `POST /v1/audio/play` (fire-and-forget streaming).
+`ServerManager` hosts the active `SpeechSynthesizer` (a protocol; `KokoroSynthesizer` or `Supertonic3Synthesizer`, FluidAudio) behind `TTSHTTPServer`, a tiny loopback-only HTTP/1.1 server on **:8000** (Network.framework, zero deps). The `tts_engine` pref selects it (default `kokoro`); the menubar picker calls `ServerManager.reloadTTSEngine()`, which swaps the synthesizer inside the (stable) `TTSPlaybackController` and rebuilds the HTTP server. Kokoro renders at 24 kHz, Supertonic3 at 44.1 kHz; the controller sizes its `AudioPlaybackEngine` to the synth's `outputSampleRate`. Supertonic3 v1 uses a single default voice + fixed `"en"` output language (the Kokoro voice picker is hidden for it). After each AI reply, a bash hook POSTs the spoken text to `POST /v1/audio/play`; the server returns `202` immediately and `TTSPlaybackController` synthesizes **sentence-by-sentence** (`SentenceSplitter`) and plays gaplessly via `AudioPlaybackEngine` (`AVAudioPlayerNode`) — so the first sentence plays while the rest are still synthesizing. Endpoints: `GET /v1/models`, `POST /v1/audio/speech` (blocking, returns WAV — used by `scripts/speak.sh`), `POST /v1/audio/play` (fire-and-forget streaming).
 
 **Barge-in** is in-process: starting a recording (or "hold on") calls `TTSPlaybackController.bargeIn()`, which cancels pending synthesis (freeing the ANE for STT) and stops audio instantly. `DictationManager` gets the controller injected by `AppDelegate`.
 
@@ -85,20 +87,20 @@ Only **voice-dictated** turns are spoken; typed turns stay silent. The mechanism
 
 ### State & IPC: flat files in Application Support
 
-`~/Library/Application Support/OpenWhisperer` (0700) is the shared bus between the GUI app, the bash hooks, and the embedded server. All prefs and signals are flat files — see `Paths.swift` for the full list. Notable ones: `tts_voice`, `tts_volume`, `stt_language`, `interaction_mode`, `ptt_hotkey`, `tts_style` (spoken-summary length: `terse`/`normal`/`rich`; was `voice_detail` before the rename — `ConfigManager.migrateVoiceDetailToTtsStyle()` migrates it on launch), `selected_platform`, `auto_submit`, `auto_focus_app`, `voice_turn`, `speak_pending/`, and `tts_playing.lock` (written while speaking; polled to drive the overlay waveform and mute the mic in hands-free mode).
+`~/Library/Application Support/OpenWhisperer` (0700) is the shared bus between the GUI app, the bash hooks, and the embedded server. All prefs and signals are flat files — see `Paths.swift` for the full list. Notable ones: `stt_engine` (`whisper-large-v3-turbo`/`parakeet-v3`/`nemotron-multilingual`), `tts_engine` (`kokoro`/`supertonic3`), `tts_voice`, `tts_volume`, `stt_language`, `interaction_mode`, `ptt_hotkey`, `tts_style` (spoken-summary length: `terse`/`normal`/`rich`; was `voice_detail` before the rename — `ConfigManager.migrateVoiceDetailToTtsStyle()` migrates it on launch), `selected_platform`, `auto_submit`, `auto_focus_app`, `voice_turn`, `speak_pending/`, and `tts_playing.lock` (written while speaking; polled to drive the overlay waveform and mute the mic in hands-free mode).
 
 These two are global (one menubar setting for all repos), but can be **overridden per-project** via env vars in that repo's `.claude/settings.local.json` `env` block — read by the hooks, which take precedence over the global file: `OW_TTS_STYLE` (overrides `tts_style`, read by `voice-context.sh`) and `OW_TTS_VOICE` (overrides `tts_voice`, read by `tts-hook.sh`). The voice rides per-request in the `/v1/audio/play` POST, so no app change is needed to honor a per-project voice.
 
 ### Concurrency
 
-`SpeechTranscriber`, `KokoroTTS`, and `TTSPlaybackController` are **actors** — they serialize work on the single ANE/compute unit and dedup the one-time model load (concurrent callers await the same in-flight `prepare()`).
+The `Transcriber` conformers (`WhisperKitTranscriber`, `FluidAudioTranscriber`), the `SpeechSynthesizer` conformers (`KokoroSynthesizer`, `Supertonic3Synthesizer`), and `TTSPlaybackController` are **actors** — they serialize work on the single ANE/compute unit and dedup the one-time model load (concurrent callers await the same in-flight `prepare()`).
 
 ### Models & offline-first
 
 First run downloads the models; both then prefer their on-disk cache and load **offline** when present:
 
-- WhisperKit → `~/Documents/huggingface/models/argmaxinc/whisperkit-coreml/<model>` (`SpeechTranscriber` explicitly loads with `download: false` when cached).
-- FluidAudio Kokoro → `~/.cache/fluidaudio`.
+- WhisperKit → `~/Documents/huggingface/models/argmaxinc/whisperkit-coreml/<model>` (`WhisperKitTranscriber` explicitly loads with `download: false` when cached).
+- FluidAudio (Kokoro/Supertonic3 TTS *and* Parakeet/Nemotron STT) → `~/.cache/fluidaudio` (its `downloadAndLoad`/`downloadAndPreloadShared` reuse the cache offline-first).
 
 This matters because the developer's firewall (Little Snitch) blocks the HuggingFace **Xet CDN**, which breaks fresh downloads — an already-cached model still loads.
 
