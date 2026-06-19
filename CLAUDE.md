@@ -85,7 +85,7 @@ This matters because the developer's firewall (Little Snitch) blocks the Hugging
 
 ## Conventions & gotchas
 
-- **Ad-hoc code signing** (`build-dmg.sh` does `codesign --sign -`): every rebuild from source invalidates the signature, so macOS **drops the Accessibility and Microphone grants**. After each rebuild, remove and re-add the app in System Settings → Privacy & Security → Accessibility.
+- **Code signing identity** is set by `OW_SIGN_IDENTITY` (default `-` = ad-hoc). With ad-hoc, the cdhash changes every build, so macOS **drops the Accessibility and Microphone grants** — dictation breaks until you remove and re-add the app in System Settings → Privacy & Security. **To stop the churn locally:** sign with a stable self-signed cert — `OW_SIGN_IDENTITY="OpenWhisperer Dev" ./build-dmg.sh` — whose designated requirement pins to the cert leaf hash (constant across rebuilds), so TCC grants persist; you re-grant only once. Release builds set `OW_SIGN_IDENTITY="Developer ID Application: …"` plus `OW_NOTARIZE=1` and `OW_NOTARIZE_PROFILE` to add hardened runtime (`Resources/OpenWhisperer.entitlements`) + notarize + staple the DMG (needs a paid Apple Developer account).
 - Platform (Claude Code vs Codex CLI) is selected in the menubar; `ConfigManager` writes the right hooks/config for each (`~/.claude/settings.json` or `~/.codex/config.toml`).
 - Version is hardcoded as `1.4.0` in both `build-dmg.sh` and `Resources/Info.plist` — bump both together.
 - `app/Tools/` (G2PParity, STTDiag, FluidTTSSpike) are local-only diagnostic spikes and are **gitignored**.
