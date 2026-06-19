@@ -27,8 +27,8 @@ Everything runs on your Mac — no cloud APIs, no data leaves your machine.
 
 ## What's New in 1.4.0
 
-- **Streaming text-to-speech** — speech now starts after the first sentence is synthesized instead of waiting for the whole response, so the AI starts talking back noticeably sooner. Playback is gapless, and "hold on" barge-in stops it near-instantly. Automatically falls back to the classic method if streaming is unavailable.
-- **Setup works in more environments** — Python from pyenv, conda, MacPorts, or Intel Homebrew is now found correctly (setup previously could fail with "no Python found").
+- **Streaming text-to-speech** — speech starts after the first sentence is synthesized instead of waiting for the whole response, so the AI starts talking back noticeably sooner. Playback is gapless, and "hold on" barge-in stops it near-instantly.
+- **Fully native** — speech-to-text (WhisperKit) and text-to-speech (FluidAudio Kokoro) now run in-process on the Apple Neural Engine. No Python, no separate server process to manage, and a faster cold start.
 - **Codex TTS respects your volume** — the Codex CLI hook now honors the in-app volume setting instead of a fixed level.
 - **Stability & security hardening** — fixed a transcription-overlay teardown crash, mode-switch edge cases that could mis-route dictated text, dictation landing in the wrong app when a menubar menu (ours or another utility's) was open, a faster/cleaner app quit, clearer audio-engine error messages, and tighter permissions on config files.
 
@@ -37,32 +37,32 @@ Everything runs on your Mac — no cloud APIs, no data leaves your machine.
 [**Download OpenWhisperer-1.4.0.dmg**](https://github.com/PerIPan/OpenWhisperer/releases/download/v1.4.0/OpenWhisperer-1.4.0.dmg) — drag to Applications and launch.
 
 On first launch, the app:
-- Creates a Python environment with all dependencies
-- Downloads MLX Whisper (~1.5GB) and Kokoro TTS (~300MB) models
-- Starts the unified server automatically
+- Downloads the Whisper (speech-to-text) and Kokoro (text-to-speech) CoreML models
+- Loads both models on the Apple Neural Engine
+- Starts the in-app TTS server automatically (loopback only, port 8000)
 
 The menubar icon gives you:
 - Start/Stop/Restart server with configurable port
 - **Push-to-Talk** — configurable hotkey (Ctrl, fn, Option, Cmd) to record
 - **Language selector** — set STT language to avoid hallucinations (17 languages)
 - **Voice picker** — choose from 11 Kokoro voices across 8 languages (no server restart needed)
-- **Voice detail** — set VOICE tag verbosity: Brief (1 sentence), Natural (1-3), or Detailed (4-6)
+- **Voice detail** — how verbose the spoken summary is: Terse, Normal (default), or Rich
 - **TTS Volume** — Low, Medium (default), or High output volume
 - **Start on startup** — optional login item to launch automatically when you log in
 - **Automation** — Auto-Focus and Auto-Submit (requires Accessibility permission)
-- **Platform selector** — switch between Claude Code and Codex CLI (auto-configures hooks and voice tags)
-- **Auto-Apply** — one-click setup for hooks and voice tags (adapts to selected platform)
+- **Platform selector** — switch between Claude Code and Codex CLI (auto-configures hooks)
+- **Auto-Apply** — one-click setup for the hooks (adapts to selected platform)
 - **Accessibility prompt** — asks for permission on first launch with live granted/not-granted status
-- **Diagnostic checklist** — shows hook, voice tag, and TTS status at a glance
+- **Diagnostic checklist** — shows hook and TTS status at a glance
 - **Transcription overlay** — floating window showing live waveform and recent transcriptions
 - **Events log** — diagnostic log for troubleshooting paste and transcription issues
-- Unified server log (STT + TTS on single port, includes transcribed text)
+- TTS server log (the in-app native TTS server)
 
 After setup, use the menubar buttons for configuration instructions.
 
 ## Voice Input Modes
 
-Three modes for speech-to-text, all using your local Whisper server. Transcribed text is typed directly into whatever app you have focused.
+Three modes for speech-to-text, all using your local Whisper model. Transcribed text is typed directly into whatever app you have focused.
 
 ### Hold-to-Talk (default)
 
@@ -118,72 +118,65 @@ Enable **Auto-Submit** to automatically submit after every transcription — no 
 
 If you prefer not to grant Accessibility permission, press **fn fn** to use built-in macOS dictation. Less accurate for technical terms, but works instantly with zero setup.
 
-## How the VOICE Tag Works
+## How Spoken Replies Work
 
-Claude adds a `[VOICE: ...]` tag at the end of every response:
+There's no special tag to add — voice mode works automatically. The app and its hooks coordinate so that only **voice-dictated** turns are spoken; turns you type stay silent:
 
-```
-Here's the full code with detailed explanation...
+1. When you dictate, the app records a fingerprint of the text it inserted.
+2. The **UserPromptSubmit** hook recognizes that turn as a voice turn and quietly nudges the model to open its reply with a short summary that stands alone.
+3. The **Stop** hook takes the first paragraph of the reply, strips markdown (capped at ~600 characters), and speaks it through the local Kokoro TTS model.
 
-[VOICE: I added the login endpoint. It validates the email and returns a JWT token.]
-```
-
-- **Screen**: You see the full detailed response
-- **Speakers**: You hear only the short spoken summary
-- The hook script extracts the tag, sends it to Kokoro TTS, and plays the audio
-- If there's no `[VOICE:]` tag, the hook falls back to stripping markdown and reading the raw text (truncated to ~600 chars)
+- **Screen**: you see the full detailed response
+- **Speakers**: you hear the spoken opening summary
 
 ### Voice Detail Levels
 
-Choose how verbose the spoken summary is (set in the menubar under **Detail**):
+Choose how verbose that opening summary should be (set in the menubar under **Detail**):
 
-| Level | Sentences | Description |
-|-------|-----------|-------------|
-| **Brief** | 1 | Just the key outcome |
-| **Natural** | 1-3 | Conversational summary (default) |
-| **Detailed** | 4-6 | Thorough explanation of what changed, why, and what to do next |
+| Level | Spoken summary |
+|-------|----------------|
+| **Terse** | One short sentence — just the key outcome |
+| **Normal** | One plain sentence (default) |
+| **Rich** | A sentence or two of summary |
 
 ## Configuration
 
+Most settings are configured from the menubar (voice, volume, language, hotkey, detail level) and stored under `~/Library/Application Support/OpenWhisperer`. The hooks and `speak.sh` also honor a few environment variables:
+
 | Variable | Default | Used by | Description |
 |----------|---------|---------|-------------|
-| `TTS_URL` | `http://localhost:8000/v1/audio/speech` | tts-hook.sh | Unified server TTS endpoint |
-| `TTS_VOICE` | `af_heart` | tts-hook.sh | Kokoro voice name |
-| `TTS_VOLUME` | `1` | tts-hook.sh | Playback volume (0.3=Low, 1=Medium, 4=High) |
-| `TTS_MODEL` | `prince-canuma/Kokoro-82M` | tts-hook.sh | TTS model |
-| `SERVER_PORT` | `8000` | unified_server.py | Server port |
-| `WHISPER_MODEL` | `mlx-community/whisper-large-v3-turbo` | unified_server.py | Whisper model |
+| `TTS_VOICE` | `af_heart` | hooks, `speak.sh` | Kokoro voice name (the menubar voice picker overrides this) |
+| `TTS_PLAY_URL` | `http://localhost:8000/v1/audio/play` | hooks | In-app streaming-playback endpoint (loopback only) |
+| `TTS_URL` | `http://localhost:8000/v1/audio/speech` | `speak.sh` | Blocking synthesize-to-WAV endpoint |
+| `TTS_VOLUME` | `1` | `speak.sh` | Playback volume (the in-app player uses the menubar volume setting instead) |
 
 > **Tip:** Setting a specific language (e.g. English) instead of auto-detect prevents Whisper from hallucinating text in other languages during silence or background noise.
 
 ## Troubleshooting
 
 **No audio after response:**
-1. Check TTS server is running: `curl http://localhost:8000/models`
+1. Check the TTS server is running: `curl http://localhost:8000/v1/models`
 2. Test TTS directly: `echo "hello" | ./scripts/speak.sh`
 3. Check the hook path in `settings.json` is correct and absolute
+4. Remember only **dictated** turns are spoken — typed prompts stay silent by design
 
 **Push-to-talk not typing text:**
 1. Check Accessibility permission is granted in System Settings
-2. If rebuilt from source, remove and re-add the app in Accessibility settings
-3. Check Events Log in the menubar for diagnostic details
-
-**422 error from TTS:**
-- Make sure `model` field is included in requests
-- Run `./setup.sh` again to reinstall spaCy model
+2. If rebuilt from source, remove and re-add the app in Accessibility settings (macOS caches the code signature)
+3. Check the Events Log in the menubar for diagnostic details
 
 ---
 
-## Manual Setup (from source)
+## Building from Source
 
 > **Tip:** You can ask your AI assistant (Claude, ChatGPT, etc.) to run these steps for you. Just paste the section below into your AI chat.
 
 ### Prerequisites
 
-- Mac with Apple Silicon (M1/M2/M3/M4)
-- [Claude Code](https://claude.ai/claude-code) (CLI or VS Code extension)
-- [uv](https://docs.astral.sh/uv/) (`curl -LsSf https://astral.sh/uv/install.sh | sh`)
-- [jq](https://jqlang.github.io/jq/) — install with one of:
+- Mac with Apple Silicon (M1/M2/M3/M4), macOS 14 or later
+- Xcode Command Line Tools (`xcode-select --install`) — provides `swift`
+- [Claude Code](https://claude.ai/claude-code) or [Codex CLI](https://github.com/openai/codex)
+- [jq](https://jqlang.github.io/jq/) — only needed to run the hooks straight from the source tree (the built `.app` bundles its own copy). Install with one of:
   ```bash
   # Option A: Direct download (no package manager needed)
   curl -L -o /usr/local/bin/jq https://github.com/jqlang/jq/releases/download/jq-1.7.1/jq-macos-arm64 && chmod +x /usr/local/bin/jq
@@ -192,89 +185,67 @@ Choose how verbose the spoken summary is (set in the menubar under **Detail**):
   brew install jq
   ```
 
-### Step 1: Install
+There is **no Python, virtualenv, or `pip`/`uv` step** — speech-to-text and text-to-speech are native Swift (WhisperKit + FluidAudio) and run in-process on the Apple Neural Engine.
+
+### Step 1: Build the app
 
 ```bash
 git clone https://github.com/PerIPan/OpenWhisperer.git
-cd OpenWhisperer
-chmod +x setup.sh && ./setup.sh
+cd OpenWhisperer/app
+chmod +x build-dmg.sh
+./build-dmg.sh
 ```
 
-This creates a Python venv at `~/mlx-openai-whisper` and installs everything (MLX Audio, Whisper, Kokoro TTS, spaCy).
+This produces `Open Whisperer.app` and `OpenWhisperer-1.4.0.dmg` in `app/.build/`. Launch the app — on first launch it downloads the Whisper and Kokoro models, then starts the in-app TTS server on `localhost:8000` automatically. (For a plain debug build during development, run `swift build` from `app/`.)
 
-### Step 2: Start the servers
+### Step 2: Wire up the hooks
 
-```bash
-./servers/start-servers.sh
-```
-
-One unified server starts on:
-- `localhost:8000` — Whisper STT + Kokoro TTS (both on one port)
-
-Keep this terminal open while using Claude.
-
-### Step 3: Tell Claude to speak
-
-Copy the `CLAUDE.md` file into any project where you want voice mode:
-
-```bash
-cp CLAUDE.md ~/my-project/
-```
-
-This tells Claude to add a `[VOICE: ...]` tag to every response with a short spoken summary.
-
-### Step 4: Add the TTS hook
-
-Add this to your `~/.claude/settings.json` (or your project's `.claude/settings.json`):
+The easiest path is the menubar's **Auto-Apply** button, which writes the right hooks for the selected platform (Claude Code or Codex CLI). To do it by hand for Claude Code, add this to `~/.claude/settings.json` (or a project's `.claude/settings.json`):
 
 ```json
 {
   "hooks": {
     "Stop": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "/absolute/path/to/OpenWhisperer/hooks/tts-hook.sh",
-            "timeout": 60
-          }
-        ]
-      }
+      { "hooks": [ { "type": "command", "command": "/absolute/path/to/OpenWhisperer/hooks/tts-hook.sh", "timeout": 60 } ] }
+    ],
+    "UserPromptSubmit": [
+      { "hooks": [ { "type": "command", "command": "/absolute/path/to/OpenWhisperer/hooks/voice-context.sh", "timeout": 60 } ] }
     ]
   }
 }
 ```
 
-Replace `/absolute/path/to/OpenWhisperer` with where you cloned the repo (e.g. `/Users/yourname/OpenWhisperer`).
+Replace `/absolute/path/to/OpenWhisperer` with where you cloned the repo. The `UserPromptSubmit` hook detects voice turns; the `Stop` hook speaks the reply. That's all — no `CLAUDE.md` or `[VOICE:]` tag is required.
 
-### Building the App from Source
+### Running the TTS server headlessly
+
+For testing or CI you can run just the native TTS server, no GUI:
 
 ```bash
 cd app
-chmod +x build-dmg.sh
-./build-dmg.sh
+swift run OpenWhisperer --serve-tts   # serves http://localhost:8000 (set TTS_PORT to change)
 ```
-
-Requires Xcode Command Line Tools. Produces `Open Whisperer.app` and `OpenWhisperer-1.4.0.dmg` in `app/.build/`.
 
 ## File Structure
 
 ```
 OpenWhisperer/
-├── CLAUDE.md              # Copy to your project (tells Claude to add VOICE tags)
-├── setup.sh               # One-click installer
+├── CLAUDE.md                 # Guidance for AI assistants working on this repo
 ├── hooks/
-│   └── tts-hook.sh       # Claude Code hook — speaks responses via TTS
-├── servers/
-│   ├── unified_server.py # Unified STT+TTS server (single port, auto-submit)
-│   └── start-servers.sh  # Launches the server
+│   ├── tts-hook.sh           # Claude Code Stop hook — speaks the reply's first paragraph
+│   ├── voice-context.sh      # Claude Code UserPromptSubmit hook — voice-turn detection
+│   ├── codex-tts-hook.sh     # Codex CLI notify hook
+│   └── first-paragraph.sh    # Shared spoken-text extractor
 ├── scripts/
-│   └── speak.sh          # Standalone TTS utility (pipe text to hear it)
-└── app/                   # macOS menubar app source (Swift)
+│   └── speak.sh              # Standalone TTS utility (pipe text to hear it)
+└── app/                      # macOS menubar app (Swift Package)
     ├── Package.swift
     ├── Sources/
+    │   ├── OpenWhisperer/     # App + native STT (WhisperKit) + native TTS (FluidAudio)
+    │   └── OpenWhispererKit/  # Pure, unit-tested logic
+    ├── Tests/
     ├── Resources/
-    └── build-dmg.sh       # Build the .dmg yourself
+    └── build-dmg.sh          # Build the .app + .dmg
 ```
 
 ## Contributing
@@ -283,14 +254,10 @@ Contributions are welcome! Feel free to open issues or submit pull requests. Whe
 
 ## Credits
 
-- [MLX Audio](https://github.com/Blaizzy/mlx-audio) — TTS and STT on Apple Silicon
-- [MLX Whisper](https://github.com/ml-explore/mlx-examples) — Speech-to-text (MLX port of OpenAI Whisper)
+- [WhisperKit](https://github.com/argmaxinc/WhisperKit) — on-device speech-to-text (CoreML / Apple Neural Engine)
+- [FluidAudio](https://github.com/FluidInference/FluidAudio) — on-device Kokoro text-to-speech (CoreML / Apple Neural Engine)
 - [Kokoro](https://huggingface.co/prince-canuma/Kokoro-82M) — TTS model
-- [FastAPI](https://fastapi.tiangolo.com/) — Server framework
-- [Uvicorn](https://www.uvicorn.org/) — ASGI server
-- [spaCy](https://spacy.io/) — NLP (required by Kokoro)
-- [uv](https://docs.astral.sh/uv/) — Python package manager
-- [jq](https://jqlang.github.io/jq/) — JSON processor
+- [jq](https://jqlang.github.io/jq/) — JSON processor (used by the hooks)
 - [Claude Code](https://claude.ai/claude-code) — Anthropic's CLI
 - [Codex CLI](https://github.com/openai/codex) — OpenAI's CLI agent
 
