@@ -11,6 +11,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var dictationSetupDone = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // Rename legacy voice_detail → tts_style before the menubar UI reads it.
+        ConfigManager.migrateVoiceDetailToTtsStyle()
         // Prompt for Accessibility permission if not already granted
         accessibilityManager.requestIfNeeded()
         // Clean stale temp/lock/pid files from previous sessions (background, delayed)

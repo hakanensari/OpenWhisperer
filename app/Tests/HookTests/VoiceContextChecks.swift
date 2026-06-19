@@ -75,23 +75,44 @@ func voiceContextFailures() -> [String] {
         if !s.markerExists(session: "a/b c:d") { fail("sessionIdSanitized: expected speak_pending/a_b_c_d") }
     }
 
-    // 6) terse detail → terser nudge.
+    // 6) terse style → terser nudge.
     do {
         let s = newSandbox()
-        s.writeVoiceTurn(forPrompt: "go"); s.writeVoiceDetail("terse")
+        s.writeVoiceTurn(forPrompt: "go"); s.writeTtsStyle("terse")
         let r = Hook.run("voice-context.sh", stdin: input(prompt: "go", session: "s1"), sandbox: s)
         if nudge(r.stdout)?.contains("one short, plain spoken sentence") != true {
-            fail("terseDetail: nudge not terse: \(nudge(r.stdout)?.debugDescription ?? "nil")")
+            fail("terseStyle: nudge not terse: \(nudge(r.stdout)?.debugDescription ?? "nil")")
         }
     }
 
-    // 7) rich detail → richer nudge.
+    // 7) rich style → richer nudge.
     do {
         let s = newSandbox()
-        s.writeVoiceTurn(forPrompt: "go"); s.writeVoiceDetail("rich")
+        s.writeVoiceTurn(forPrompt: "go"); s.writeTtsStyle("rich")
         let r = Hook.run("voice-context.sh", stdin: input(prompt: "go", session: "s1"), sandbox: s)
         if nudge(r.stdout)?.contains("a sentence or two") != true {
-            fail("richDetail: nudge not rich: \(nudge(r.stdout)?.debugDescription ?? "nil")")
+            fail("richStyle: nudge not rich: \(nudge(r.stdout)?.debugDescription ?? "nil")")
+        }
+    }
+
+    // 8) per-project OW_TTS_STYLE env overrides the global tts_style file.
+    do {
+        let s = newSandbox()
+        s.writeVoiceTurn(forPrompt: "go"); s.writeTtsStyle("rich")
+        let r = Hook.run("voice-context.sh", stdin: input(prompt: "go", session: "s1"),
+                         sandbox: s, env: ["OW_TTS_STYLE": "terse"])
+        if nudge(r.stdout)?.contains("one short, plain spoken sentence") != true {
+            fail("envStyleOverride: env did not win over file: \(nudge(r.stdout)?.debugDescription ?? "nil")")
+        }
+    }
+
+    // 9) legacy voice_detail still honored when tts_style is absent (migration safety net).
+    do {
+        let s = newSandbox()
+        s.writeVoiceTurn(forPrompt: "go"); s.writeLegacyVoiceDetail("rich")
+        let r = Hook.run("voice-context.sh", stdin: input(prompt: "go", session: "s1"), sandbox: s)
+        if nudge(r.stdout)?.contains("a sentence or two") != true {
+            fail("legacyDetailFallback: legacy voice_detail not honored: \(nudge(r.stdout)?.debugDescription ?? "nil")")
         }
     }
 

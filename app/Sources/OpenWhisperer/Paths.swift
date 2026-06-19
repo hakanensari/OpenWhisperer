@@ -47,8 +47,12 @@ enum Paths {
     /// TTS voice file (tts-hook.sh reads voice name from this)
     static let ttsVoice = appSupport.appendingPathComponent("tts_voice")
 
-    /// Voice detail level file (controls VOICE tag verbosity in CLAUDE.md)
-    static let voiceDetail = appSupport.appendingPathComponent("voice_detail")
+    /// TTS spoken-summary style/length: terse | normal | rich. Read by
+    /// voice-context.sh to shape the nudge; overridable per-project via OW_TTS_STYLE.
+    static let ttsStyle = appSupport.appendingPathComponent("tts_style")
+
+    /// Legacy name for `ttsStyle` (pre-rename). Migrated to `tts_style` on launch.
+    static let legacyVoiceDetail = appSupport.appendingPathComponent("voice_detail")
 
     /// Voice-turn signal (hash + unix timestamp) written by the app on each
     /// dictation; read & claimed by the UserPromptSubmit hook (voice-context.sh).

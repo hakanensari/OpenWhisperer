@@ -57,9 +57,13 @@ mkdir -p "$PENDING_DIR"
 SAFE_ID=$(printf '%s' "$SESSION_ID" | tr -c 'A-Za-z0-9_.-' '_')
 : > "$PENDING_DIR/$SAFE_ID"
 
-# Nudge verbosity from voice_detail (shapes only the nudge; Stop speaks the first paragraph).
-DETAIL=$(cat "$APP_SUPPORT/voice_detail" 2>/dev/null | tr -d '[:space:]')
-case "$DETAIL" in
+# Spoken-summary style (length). Precedence: per-project OW_TTS_STYLE env →
+# global tts_style file → legacy voice_detail. Shapes ONLY the nudge wording;
+# the Stop hook always speaks the first paragraph.
+STYLE="$OW_TTS_STYLE"
+[ -z "$STYLE" ] && STYLE=$(cat "$APP_SUPPORT/tts_style" 2>/dev/null | tr -d '[:space:]')
+[ -z "$STYLE" ] && STYLE=$(cat "$APP_SUPPORT/voice_detail" 2>/dev/null | tr -d '[:space:]')
+case "$STYLE" in
   terse) LEN="one short, plain spoken sentence" ;;
   rich)  LEN="a sentence or two of plain spoken summary" ;;
   *)     LEN="one plain spoken sentence" ;;

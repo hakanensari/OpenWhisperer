@@ -59,9 +59,15 @@ enum Hook {
                             atomically: true, encoding: .utf8)
         }
 
-        func writeVoiceDetail(_ detail: String) {
-            try? detail.write(to: appSupport.appendingPathComponent("voice_detail"),
-                              atomically: true, encoding: .utf8)
+        func writeTtsStyle(_ style: String) {
+            try? style.write(to: appSupport.appendingPathComponent("tts_style"),
+                             atomically: true, encoding: .utf8)
+        }
+
+        /// Legacy pre-rename settings file; the hook still falls back to it.
+        func writeLegacyVoiceDetail(_ style: String) {
+            try? style.write(to: appSupport.appendingPathComponent("voice_detail"),
+                             atomically: true, encoding: .utf8)
         }
 
         /// Create a `speak_pending/<sanitized session id>` marker the Stop hook gate looks for.

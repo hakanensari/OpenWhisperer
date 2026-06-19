@@ -384,6 +384,15 @@ enum ConfigManager {
         }
     }
 
+    /// One-shot: rename the legacy `voice_detail` settings file to `tts_style` so
+    /// existing installs keep their spoken-summary style after the rename.
+    static func migrateVoiceDetailToTtsStyle() {
+        let fm = FileManager.default
+        guard !fm.fileExists(atPath: Paths.ttsStyle.path),
+              fm.fileExists(atPath: Paths.legacyVoiceDetail.path) else { return }
+        try? fm.moveItem(at: Paths.legacyVoiceDetail, to: Paths.ttsStyle)
+    }
+
     // MARK: - Diagnostics
 
     static func checkHookConfigured() -> Bool {
