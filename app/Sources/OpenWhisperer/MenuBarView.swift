@@ -54,7 +54,7 @@ struct MenuBarView: View {
     @State private var selectedVolume = "medium"
     @State private var selectedVoice = "af_heart"
     @State private var selectedLanguage = "en"
-    @State private var selectedDetail = "normal"
+    @State private var selectedStyle = "normal"
     @State private var showStoppedBanner = false
     @State private var pttKeyChanged = false
     @State private var selectedPlatform: Platform = .claudeCode
@@ -112,7 +112,7 @@ struct MenuBarView: View {
         ("sv", "Swedish"),
     ]
 
-    private static let detailLevels: [(id: String, label: String)] = [
+    private static let styleLevels: [(id: String, label: String)] = [
         ("terse", "Terse"),
         ("normal", "Normal"),
         ("rich", "Rich"),
@@ -213,11 +213,11 @@ struct MenuBarView: View {
                     selectedLanguage = lang
                 }
             }
-            if let savedDetail = try? String(contentsOf: Paths.voiceDetail, encoding: .utf8),
-               !savedDetail.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                let detail = savedDetail.trimmingCharacters(in: .whitespacesAndNewlines)
-                if Self.detailLevels.contains(where: { $0.id == detail }) {
-                    selectedDetail = detail
+            if let savedStyle = try? String(contentsOf: Paths.ttsStyle, encoding: .utf8),
+               !savedStyle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                let style = savedStyle.trimmingCharacters(in: .whitespacesAndNewlines)
+                if Self.styleLevels.contains(where: { $0.id == style }) {
+                    selectedStyle = style
                 }
             }
             if let savedVolume = try? String(contentsOf: Paths.ttsVolume, encoding: .utf8),
@@ -493,13 +493,13 @@ struct MenuBarView: View {
 
                 OWInternalDivider()
 
-                OWPickerRow(label: "Detail", labelWidth: 52) {
-                    OWMenuPicker(selection: $selectedDetail, options: Self.detailLevels)
+                OWPickerRow(label: "Style", labelWidth: 52) {
+                    OWMenuPicker(selection: $selectedStyle, options: Self.styleLevels)
                         .frame(maxWidth: .infinity)
                 }
                 .help("Spoken summary length — shapes the voice nudge injected by the hook")
-                .onChange(of: selectedDetail) { _, newValue in
-                    try? newValue.write(to: Paths.voiceDetail, atomically: true, encoding: .utf8)
+                .onChange(of: selectedStyle) { _, newValue in
+                    try? newValue.write(to: Paths.ttsStyle, atomically: true, encoding: .utf8)
                 }
 
                 OWInternalDivider()

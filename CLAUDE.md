@@ -85,7 +85,9 @@ Only **voice-dictated** turns are spoken; typed turns stay silent. The mechanism
 
 ### State & IPC: flat files in Application Support
 
-`~/Library/Application Support/OpenWhisperer` (0700) is the shared bus between the GUI app, the bash hooks, and the embedded server. All prefs and signals are flat files — see `Paths.swift` for the full list. Notable ones: `tts_voice`, `tts_volume`, `stt_language`, `interaction_mode`, `ptt_hotkey`, `voice_detail`, `selected_platform`, `auto_submit`, `auto_focus_app`, `voice_turn`, `speak_pending/`, and `tts_playing.lock` (written while speaking; polled to drive the overlay waveform and mute the mic in hands-free mode).
+`~/Library/Application Support/OpenWhisperer` (0700) is the shared bus between the GUI app, the bash hooks, and the embedded server. All prefs and signals are flat files — see `Paths.swift` for the full list. Notable ones: `tts_voice`, `tts_volume`, `stt_language`, `interaction_mode`, `ptt_hotkey`, `tts_style` (spoken-summary length: `terse`/`normal`/`rich`; was `voice_detail` before the rename — `ConfigManager.migrateVoiceDetailToTtsStyle()` migrates it on launch), `selected_platform`, `auto_submit`, `auto_focus_app`, `voice_turn`, `speak_pending/`, and `tts_playing.lock` (written while speaking; polled to drive the overlay waveform and mute the mic in hands-free mode).
+
+These two are global (one menubar setting for all repos), but can be **overridden per-project** via env vars in that repo's `.claude/settings.local.json` `env` block — read by the hooks, which take precedence over the global file: `OW_TTS_STYLE` (overrides `tts_style`, read by `voice-context.sh`) and `OW_TTS_VOICE` (overrides `tts_voice`, read by `tts-hook.sh`). The voice rides per-request in the `/v1/audio/play` POST, so no app change is needed to honor a per-project voice.
 
 ### Concurrency
 

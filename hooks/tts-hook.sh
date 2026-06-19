@@ -46,12 +46,15 @@ HOOK_DIR="$(cd "$(dirname "$0")" && pwd)"
 SPEECH=$(printf '%s' "$TEXT" | "$HOOK_DIR/first-paragraph.sh")
 [ -z "$SPEECH" ] && exit 0
 
-# Resolve voice (volume is applied app-side now).
-VOICE_FILE="$APP_SUPPORT/tts_voice"
-if [ -f "$VOICE_FILE" ] && [ ! -L "$VOICE_FILE" ]; then
-  VOICE="$(cat "$VOICE_FILE" 2>/dev/null | tr -d '[:space:]')"; VOICE="${VOICE:-${TTS_VOICE:-af_heart}}"
-else
-  VOICE="${TTS_VOICE:-af_heart}"
+# Resolve voice. Precedence: per-project OW_TTS_VOICE env → global tts_voice file
+# → TTS_VOICE env → af_heart. (Volume is applied app-side now.)
+VOICE="$OW_TTS_VOICE"
+if [ -z "$VOICE" ]; then
+  VOICE_FILE="$APP_SUPPORT/tts_voice"
+  if [ -f "$VOICE_FILE" ] && [ ! -L "$VOICE_FILE" ]; then
+    VOICE="$(cat "$VOICE_FILE" 2>/dev/null | tr -d '[:space:]')"
+  fi
+  VOICE="${VOICE:-${TTS_VOICE:-af_heart}}"
 fi
 
 # POST to the in-app player (loopback only). Fire-and-forget: the app returns 202 immediately,
