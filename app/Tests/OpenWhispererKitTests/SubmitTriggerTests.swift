@@ -12,6 +12,7 @@ struct KitTestRunner {
         failures += voiceMigrationFailures()
         failures += numberNormalizerFailures()
         failures += sentenceSplitterFailures()
+        failures += engineFailures()
 
         if failures.isEmpty {
             print("✅ OpenWhispererKit: all checks passed")

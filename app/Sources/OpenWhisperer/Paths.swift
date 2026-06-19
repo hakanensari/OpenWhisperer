@@ -68,6 +68,12 @@ enum Paths {
     /// Interaction mode preference (pressToTalk, holdToTalk, handsFree)
     static let interactionMode = appSupport.appendingPathComponent("interaction_mode")
 
+    /// Selected STT engine (whisper-large-v3-turbo, parakeet-v3, nemotron-multilingual)
+    static let sttEngine = appSupport.appendingPathComponent("stt_engine")
+
+    /// Selected TTS engine (kokoro, supertonic3)
+    static let ttsEngine = appSupport.appendingPathComponent("tts_engine")
+
     /// Silence threshold for hands-free mode (seconds, default 3)
     static let silenceThreshold = appSupport.appendingPathComponent("silence_threshold")
 
