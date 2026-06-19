@@ -1,5 +1,6 @@
 import SwiftUI
 import ServiceManagement
+import OpenWhispererKit
 
 // MARK: - Design Tokens
 
@@ -54,6 +55,8 @@ struct MenuBarView: View {
     @State private var selectedVolume = "medium"
     @State private var selectedVoice = "af_heart"
     @State private var selectedLanguage = "en"
+    @State private var selectedSTTEngine = STTEngine.defaultEngine.rawValue
+    @State private var selectedTTSEngine = TTSEngine.defaultEngine.rawValue
     @State private var selectedStyle = "normal"
     @State private var showStoppedBanner = false
     @State private var pttKeyChanged = false
@@ -117,6 +120,12 @@ struct MenuBarView: View {
         ("normal", "Normal"),
         ("rich", "Rich"),
     ]
+
+    private static let sttEngines: [(id: String, label: String)] =
+        STTEngine.allCases.map { (id: $0.rawValue, label: $0.label) }
+
+    private static let ttsEngines: [(id: String, label: String)] =
+        TTSEngine.allCases.map { (id: $0.rawValue, label: $0.label) }
 
     private static let volumeLevels: [(id: String, label: String, value: String)] = [
         ("low", "Low", "0.3"),
@@ -228,6 +237,8 @@ struct MenuBarView: View {
                 }
             }
             selectedMode = InteractionMode.load()
+            selectedSTTEngine = STTEngine.load().rawValue
+            selectedTTSEngine = TTSEngine.load().rawValue
             if let savedStr = try? String(contentsOf: Paths.silenceThreshold, encoding: .utf8),
                let saved = Int(savedStr.trimmingCharacters(in: .whitespacesAndNewlines)) {
                 silenceThreshold = saved
@@ -469,6 +480,18 @@ struct MenuBarView: View {
             EmptyView()
         } expandedContent: {
             VStack(alignment: .leading, spacing: 10) {
+                OWPickerRow(label: "STT", labelWidth: 52) {
+                    OWMenuPicker(selection: $selectedSTTEngine, options: Self.sttEngines)
+                        .frame(maxWidth: .infinity)
+                }
+                .help("Speech-to-text engine for dictation (Whisper is multilingual; Nemotron adds Turkish)")
+                .onChange(of: selectedSTTEngine) { _, newValue in
+                    STTEngine.parse(newValue).save()
+                    dictationManager.reloadSTTEngine()
+                }
+
+                OWInternalDivider()
+
                 OWPickerRow(label: "Dictate", labelWidth: 52) {
                     OWMenuPicker(selection: $selectedLanguage, options: Self.languages)
                         .frame(maxWidth: .infinity)
@@ -483,15 +506,31 @@ struct MenuBarView: View {
 
                 OWInternalDivider()
 
-                OWPickerRow(label: "Voice", labelWidth: 52) {
-                    OWMenuPicker(selection: $selectedVoice, options: Self.voices)
+                OWPickerRow(label: "TTS", labelWidth: 52) {
+                    OWMenuPicker(selection: $selectedTTSEngine, options: Self.ttsEngines)
                         .frame(maxWidth: .infinity)
                 }
-                .onChange(of: selectedVoice) { _, newValue in
-                    try? newValue.write(to: Paths.ttsVoice, atomically: true, encoding: .utf8)
+                .help("Text-to-speech engine for spoken replies")
+                .onChange(of: selectedTTSEngine) { _, newValue in
+                    TTSEngine.parse(newValue).save()
+                    serverManager.reloadTTSEngine()
                 }
 
                 OWInternalDivider()
+
+                // Kokoro is the only engine with a selectable voice list; Supertonic3 (v1)
+                // uses a single default voice, so the picker is hidden for it.
+                if selectedTTSEngine == TTSEngine.kokoro.rawValue {
+                    OWPickerRow(label: "Voice", labelWidth: 52) {
+                        OWMenuPicker(selection: $selectedVoice, options: Self.voices)
+                            .frame(maxWidth: .infinity)
+                    }
+                    .onChange(of: selectedVoice) { _, newValue in
+                        try? newValue.write(to: Paths.ttsVoice, atomically: true, encoding: .utf8)
+                    }
+
+                    OWInternalDivider()
+                }
 
                 OWPickerRow(label: "Style", labelWidth: 52) {
                     OWMenuPicker(selection: $selectedStyle, options: Self.styleLevels)
