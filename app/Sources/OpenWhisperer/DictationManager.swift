@@ -11,8 +11,20 @@ private let dictLog = OSLog(subsystem: "com.openwhisperer.app", category: "dicta
 class DictationManager: ObservableObject {
     let recorder = AudioRecorder()
     let keywordDetector = KeywordDetector()
-    /// In-process Whisper STT (WhisperKit). Replaces the HTTP call to the Python server.
-    let transcriber = SpeechTranscriber()
+    /// In-process STT backend, chosen by the `stt_engine` pref (WhisperKit / FluidAudio
+    /// Parakeet / FluidAudio Nemotron). Rebuilt by `reloadSTTEngine()` when the user picks
+    /// a different engine in the menu.
+    private(set) var sttEngine: STTEngine = .load()
+    lazy var transcriber: any Transcriber = DictationManager.makeTranscriber(self.sttEngine)
+
+    /// Build the backend for an engine. WhisperKit for the Whisper case; FluidAudio for the
+    /// Parakeet / Nemotron cases.
+    static func makeTranscriber(_ engine: STTEngine) -> any Transcriber {
+        switch engine {
+        case .whisperLargeV3Turbo: return WhisperKitTranscriber()
+        case .parakeetV3, .nemotronMultilingual: return FluidAudioTranscriber(engine: engine)
+        }
+    }
     /// In-process TTS playback (Phase 3). Injected by `AppDelegate` from `ServerManager`; used by
     /// `killTTS()` for instant barge-in. Optional so headless/test paths without a server still run.
     var ttsController: TTSPlaybackController?
@@ -148,7 +160,7 @@ class DictationManager: ObservableObject {
         Task { [weak self] in
             guard let self else { return }
             do {
-                _ = try await self.transcriber.prepare()
+                try await self.transcriber.prepare()
                 await MainActor.run {
                     self.sttModelReady = true
                     self.sttFailed = false
@@ -169,6 +181,18 @@ class DictationManager: ObservableObject {
     func retrySTT() {
         sttFailed = false
         sttModelReady = false
+        prepareSTT()
+    }
+
+    /// Called from the menu when the user picks a different STT engine. Rebuilds the
+    /// backend and (re)loads its model. No-op if the saved engine is unchanged. Main thread.
+    func reloadSTTEngine() {
+        let chosen = STTEngine.load()
+        guard chosen != sttEngine else { return }
+        sttEngine = chosen
+        transcriber = DictationManager.makeTranscriber(chosen)
+        sttModelReady = false
+        sttFailed = false
         prepareSTT()
     }
 

@@ -1,12 +1,12 @@
 import Foundation
 import WhisperKit
 
-/// In-process Whisper speech-to-text via WhisperKit (CoreML / ANE).
+/// In-process Whisper speech-to-text via WhisperKit (CoreML / ANE). One of the
+/// `Transcriber` backends (the multilingual, ~99-language default-safe option).
 ///
-/// Replaces the old HTTP round-trip to the Python `mlx_whisper` server. Actor-isolated
-/// so concurrent `transcribe` calls serialize on the compute unit, and so the one-time
-/// model load can't race.
-actor SpeechTranscriber {
+/// Actor-isolated so concurrent `transcribe` calls serialize on the compute unit, and so
+/// the one-time model load can't race.
+actor WhisperKitTranscriber: Transcriber {
     enum TranscriberError: LocalizedError {
         case loadFailed(String)
         var errorDescription: String? {
@@ -39,10 +39,15 @@ actor SpeechTranscriber {
 
     var isReady: Bool { whisperKit != nil }
 
+    /// Satisfies `Transcriber`. Loads the model (idempotent) and discards the handle.
+    func prepare() async throws {
+        _ = try await ensureLoaded()
+    }
+
     /// Download (first run) + load the model. Idempotent: concurrent callers await the
     /// same in-flight load rather than starting a second one.
     @discardableResult
-    func prepare() async throws -> WhisperKit {
+    private func ensureLoaded() async throws -> WhisperKit {
         if let whisperKit { return whisperKit }
         if let loadTask { return try await loadTask.value }
 
@@ -76,7 +81,7 @@ actor SpeechTranscriber {
                 )
                 return try await WhisperKit(config)
             } catch {
-                NSLog("SpeechTranscriber: offline load failed (\(error)); retrying with download")
+                NSLog("WhisperKitTranscriber: offline load failed (\(error)); retrying with download")
             }
         }
         let config = WhisperKitConfig(model: modelName, downloadBase: hubBase)
@@ -86,12 +91,7 @@ actor SpeechTranscriber {
     /// Transcribe 16 kHz mono normalized Float PCM ([-1, 1)). `language` nil/"auto"
     /// means autodetect. Loads the model on first use if `prepare()` hasn't run yet.
     func transcribe(samples: [Float], language: String?) async throws -> String {
-        let wk: WhisperKit
-        if let whisperKit {
-            wk = whisperKit
-        } else {
-            wk = try await prepare()
-        }
+        let wk = try await ensureLoaded()
         let lang = (language?.isEmpty == false && language != "auto") ? language : nil
         let options = DecodingOptions(language: lang)
         let results = try await wk.transcribe(audioArray: samples, decodeOptions: options)
