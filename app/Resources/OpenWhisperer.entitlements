@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Microphone access under the hardened runtime (required for notarization).
+	     Accessibility and posting CGEvents to other apps are TCC permissions
+	     granted at runtime, not entitlements, so they are not listed here.
+	     The app is intentionally NOT sandboxed (it types into other apps and
+	     reads ~/Library/Application Support directly), so no app-sandbox key. -->
+	<key>com.apple.security.device.audio-input</key>
+	<true/>
+</dict>
+</plist>

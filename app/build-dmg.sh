@@ -77,9 +77,41 @@ else
 fi
 chmod +x "$APP_BUNDLE/Contents/Resources/jq"
 
-# Step 6: Ad-hoc code sign
-echo "Code signing..."
-codesign --force --deep --sign - "$APP_BUNDLE"
+# Step 6: Code sign
+# The signing identity is configurable via OW_SIGN_IDENTITY so the same script
+# serves three cases:
+#   unset / "-"                    → ad-hoc (default). Portable, but the cdhash
+#                                    changes every build, so macOS drops the
+#                                    app's Accessibility + Microphone TCC grants
+#                                    on every rebuild.
+#   "OpenWhisperer Dev"            → a stable local self-signed cert. TCC keys
+#                                    grants on the signature's designated
+#                                    requirement (constant across rebuilds), so
+#                                    permissions persist. The fix for local dev.
+#   "Developer ID Application: …"  → release signing. Pair with OW_NOTARIZE=1
+#                                    (and OW_NOTARIZE_PROFILE) to produce a
+#                                    hardened-runtime, notarized, stapled DMG
+#                                    that runs on other Macs without Gatekeeper
+#                                    warnings. Requires a paid Apple Developer
+#                                    account; left to whoever ships releases.
+SIGN_IDENTITY="${OW_SIGN_IDENTITY:--}"
+echo "Code signing with identity: $SIGN_IDENTITY"
+
+if [ -n "$OW_NOTARIZE" ] && [ "$SIGN_IDENTITY" != "-" ]; then
+    # Release path: hardened runtime + entitlements + secure timestamp.
+    # Sign the bundled jq (nested Mach-O) first — notarization rejects unsigned
+    # or un-hardened nested code — then the outer bundle.
+    ENTITLEMENTS="$SCRIPT_DIR/Resources/OpenWhisperer.entitlements"
+    codesign --force --options runtime --timestamp \
+        --sign "$SIGN_IDENTITY" "$APP_BUNDLE/Contents/Resources/jq"
+    codesign --force --options runtime --timestamp \
+        --entitlements "$ENTITLEMENTS" \
+        --sign "$SIGN_IDENTITY" "$APP_BUNDLE"
+else
+    # Ad-hoc or stable-dev local build: plain signature, no hardened runtime
+    # (not needed to run locally or to keep TCC grants; only notarization needs it).
+    codesign --force --deep --sign "$SIGN_IDENTITY" "$APP_BUNDLE"
+fi
 
 echo ""
 echo "App bundle created: $APP_BUNDLE"
@@ -102,6 +134,23 @@ hdiutil create -volname "$APP_NAME" \
     "$DMG_OUTPUT"
 
 rm -rf "$DMG_TMP"
+
+# Step 8: Notarize + staple (release only).
+# Gated on OW_NOTARIZE so local/ad-hoc builds skip it entirely. Requires a paid
+# Apple Developer account and a stored notarytool credential profile, created once:
+#   xcrun notarytool store-credentials "<profile>" \
+#       --apple-id <id> --team-id <team> --password <app-specific-password>
+# then build with: OW_SIGN_IDENTITY="Developer ID Application: …" \
+#                  OW_NOTARIZE=1 OW_NOTARIZE_PROFILE="<profile>" ./build-dmg.sh
+# Untested locally (no Developer ID account here); verify on the release machine.
+if [ -n "$OW_NOTARIZE" ]; then
+    PROFILE="${OW_NOTARIZE_PROFILE:?OW_NOTARIZE set but OW_NOTARIZE_PROFILE is empty}"
+    echo "Notarizing $DMG_OUTPUT (profile: $PROFILE)..."
+    xcrun notarytool submit "$DMG_OUTPUT" --keychain-profile "$PROFILE" --wait
+    echo "Stapling ticket..."
+    xcrun stapler staple "$DMG_OUTPUT"
+    xcrun stapler validate "$DMG_OUTPUT"
+fi
 
 echo ""
 echo "=== Done ==="
