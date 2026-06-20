@@ -18,8 +18,10 @@ public enum STTEngine: String, CaseIterable, Sendable {
         }
     }
 
-    /// First-run default (no pref file present) — see the 2026-06-20 design.
-    public static let defaultEngine: STTEngine = .nemotronMultilingual
+    /// First-run default (no pref file present). Whisper: best English quality + ~99
+    /// languages incl. Turkish. Nemotron's English proved rougher in feel-testing, so it's
+    /// opt-in (the streaming / all-FluidAudio path) rather than the default.
+    public static let defaultEngine: STTEngine = .whisperLargeV3Turbo
 
     /// Parse a pref string, falling back to `defaultEngine` on nil/blank/unknown.
     public static func parse(_ raw: String?) -> STTEngine {
