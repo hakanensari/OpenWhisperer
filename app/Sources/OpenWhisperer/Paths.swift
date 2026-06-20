@@ -19,8 +19,8 @@ enum Paths {
     /// Bundled UserPromptSubmit hook (Claude Code voice-turn detection)
     static let voiceContextHook = resources.appendingPathComponent("hooks").appendingPathComponent("voice-context.sh")
 
-    /// Bundled first-paragraph extractor used by the Stop hooks
-    static let firstParagraphScript = resources.appendingPathComponent("hooks").appendingPathComponent("first-paragraph.sh")
+    /// Bundled spoken-text extractor used by the Stop hooks
+    static let speakableTextScript = resources.appendingPathComponent("hooks").appendingPathComponent("speakable-text.sh")
 
     /// Bundled speak script
     static let speakScript = resources.appendingPathComponent("scripts").appendingPathComponent("speak.sh")

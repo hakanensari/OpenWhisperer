@@ -1,19 +1,19 @@
 import Foundation
 
-/// Port of `tests/test_first_paragraph.py`. `first-paragraph.sh` reads a markdown assistant
-/// message on stdin and prints the spoken first paragraph (markdown stripped). Returns failures.
-func firstParagraphFailures() -> [String] {
+/// `speakable-text.sh` reads a markdown assistant message on stdin and prints spoken text:
+/// the first prose paragraph by default (markdown stripped, ~600-char cap). Returns failures.
+func speakableTextFailures() -> [String] {
     var failures: [String] = []
     let sandbox = Hook.Sandbox()
     defer { sandbox.cleanup() }
 
     func firstPara(_ input: String) -> String {
-        Hook.run("first-paragraph.sh", stdin: input, sandbox: sandbox).stdout
+        Hook.run("speakable-text.sh", stdin: input, sandbox: sandbox).stdout
     }
     func expect(_ input: String, _ expected: String, _ name: String) {
         let r = firstPara(input)
         if r != expected {
-            failures.append("first-paragraph.\(name): got \(r.debugDescription), expected \(expected.debugDescription)")
+            failures.append("speakable-text.\(name): got \(r.debugDescription), expected \(expected.debugDescription)")
         }
     }
 
@@ -36,10 +36,10 @@ func firstParagraphFailures() -> [String] {
         .trimmingCharacters(in: .whitespaces) + "\n"
     let capped = firstPara(long)
     if capped.count > 600 {
-        failures.append("first-paragraph.capsLongParagraph: length \(capped.count) > 600")
+        failures.append("speakable-text.capsLongParagraph: length \(capped.count) > 600")
     }
     if !capped.hasSuffix(".") {
-        failures.append("first-paragraph.capsLongParagraph: does not end on a sentence boundary: \(capped.suffix(20).debugDescription)")
+        failures.append("speakable-text.capsLongParagraph: does not end on a sentence boundary: \(capped.suffix(20).debugDescription)")
     }
 
     return failures

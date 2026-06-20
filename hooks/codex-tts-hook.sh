@@ -40,7 +40,7 @@ rm -f "$VOICE_TURN"   # claim: this turn is spoken, future typed turns are not
 TEXT=$(echo "$INPUT" | jq -r '.["last-assistant-message"] // .last_assistant_message // empty' 2>/dev/null)
 [ -z "$TEXT" ] && exit 0
 HOOK_DIR="$(cd "$(dirname "$0")" && pwd)"
-SPEECH=$(printf '%s' "$TEXT" | "$HOOK_DIR/first-paragraph.sh")
+SPEECH=$(printf '%s' "$TEXT" | "$HOOK_DIR/speakable-text.sh")
 [ -z "$SPEECH" ] && exit 0
 
 # Resolve voice (volume is applied app-side now).

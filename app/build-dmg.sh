@@ -50,14 +50,14 @@ cp "$SCRIPT_DIR/Resources/Outfit-VariableFont_wght.ttf" "$APP_BUNDLE/Contents/Re
 cp "$PROJECT_DIR/hooks/tts-hook.sh" "$APP_BUNDLE/Contents/Resources/hooks/"
 cp "$PROJECT_DIR/hooks/codex-tts-hook.sh" "$APP_BUNDLE/Contents/Resources/hooks/"
 cp "$PROJECT_DIR/hooks/voice-context.sh" "$APP_BUNDLE/Contents/Resources/hooks/"
-cp "$PROJECT_DIR/hooks/first-paragraph.sh" "$APP_BUNDLE/Contents/Resources/hooks/"
+cp "$PROJECT_DIR/hooks/speakable-text.sh" "$APP_BUNDLE/Contents/Resources/hooks/"
 cp "$PROJECT_DIR/scripts/speak.sh" "$APP_BUNDLE/Contents/Resources/scripts/"
 
 # Make scripts executable
 chmod +x "$APP_BUNDLE/Contents/Resources/hooks/tts-hook.sh"
 chmod +x "$APP_BUNDLE/Contents/Resources/hooks/codex-tts-hook.sh"
 chmod +x "$APP_BUNDLE/Contents/Resources/hooks/voice-context.sh"
-chmod +x "$APP_BUNDLE/Contents/Resources/hooks/first-paragraph.sh"
+chmod +x "$APP_BUNDLE/Contents/Resources/hooks/speakable-text.sh"
 chmod +x "$APP_BUNDLE/Contents/Resources/scripts/speak.sh"
 
 # Step 4: Bundle jq binary (detect architecture) — the hooks use jq for JSON
