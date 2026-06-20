@@ -116,6 +116,7 @@ struct MenuBarView: View {
         ("terse", "Terse"),
         ("normal", "Normal"),
         ("rich", "Rich"),
+        ("full", "Full"),
     ]
 
     private static let volumeLevels: [(id: String, label: String, value: String)] = [
