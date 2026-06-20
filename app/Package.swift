@@ -34,7 +34,7 @@ let package = Package(
             dependencies: ["OpenWhispererKit"],
             path: "Tests/OpenWhispererKitTests"
         ),
-        // Integration tests for the bash hooks (Stop + UserPromptSubmit + first-paragraph).
+        // Integration tests for the bash hooks (Stop + UserPromptSubmit + speakable-text).
         // Shells out to ../../hooks/*.sh in an isolated temp HOME with a stubbed curl — the
         // Swift port of the deleted pytest suite. Run with: `swift run HookTests`.
         .executableTarget(

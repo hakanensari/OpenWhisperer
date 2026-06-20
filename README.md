@@ -235,7 +235,7 @@ OpenWhisperer/
 │   ├── tts-hook.sh           # Claude Code Stop hook — speaks the reply's first paragraph
 │   ├── voice-context.sh      # Claude Code UserPromptSubmit hook — voice-turn detection
 │   ├── codex-tts-hook.sh     # Codex CLI notify hook
-│   └── first-paragraph.sh    # Shared spoken-text extractor
+│   └── speakable-text.sh     # Shared spoken-text extractor
 ├── scripts/
 │   └── speak.sh              # Standalone TTS utility (pipe text to hear it)
 └── app/                      # macOS menubar app (Swift Package)

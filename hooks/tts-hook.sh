@@ -43,7 +43,7 @@ rm -f "$PENDING"
 TEXT=$(printf '%s' "$INPUT" | jq -r '.last_assistant_message // empty')
 [ -z "$TEXT" ] && exit 0
 HOOK_DIR="$(cd "$(dirname "$0")" && pwd)"
-SPEECH=$(printf '%s' "$TEXT" | "$HOOK_DIR/first-paragraph.sh")
+SPEECH=$(printf '%s' "$TEXT" | "$HOOK_DIR/speakable-text.sh")
 [ -z "$SPEECH" ] && exit 0
 
 # Resolve voice. Precedence: per-project OW_TTS_VOICE env → global tts_voice file
