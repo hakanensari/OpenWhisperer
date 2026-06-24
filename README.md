@@ -255,6 +255,10 @@ OpenWhisperer/
 
 Contributions are welcome! Feel free to open issues or submit pull requests. Whether it's bug fixes, new features, documentation improvements, or voice model suggestions — all contributions are appreciated.
 
+## Acknowledgments
+
+The native rewrite at the heart of this app — replacing the out-of-process Python server with fully in-process Swift speech-to-text (WhisperKit) and text-to-speech (FluidAudio Kokoro), in-process streaming playback and barge-in, and the tagless voice-turn handshake — was contributed by [**Hakan Ensari**](https://github.com/hakanensari) ([fork](https://github.com/hakanensari/OpenWhisperer)). It removed the Python/venv stack entirely and made the app notarizable. Thank you!
+
 ## Credits
 
 - [WhisperKit](https://github.com/argmaxinc/WhisperKit) — on-device speech-to-text (CoreML / Apple Neural Engine)
