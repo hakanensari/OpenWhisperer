@@ -100,7 +100,8 @@ These two are global (one menubar setting for all repos), but can be **overridde
 First run downloads the models; both then prefer their on-disk cache and load **offline** when present:
 
 - WhisperKit → `~/Documents/huggingface/models/argmaxinc/whisperkit-coreml/<model>` (`SpeechTranscriber` explicitly loads with `download: false` when cached).
-- FluidAudio Kokoro → `~/.cache/fluidaudio`.
+- FluidAudio Kokoro → `~/.cache/fluidaudio` (models and voice packs).
+  - *Note on Alternative Voices:* The upstream `FluidInference/kokoro-82m-coreml` repository only hosts the default `af_heart.bin` voice file under the `ANE/` subpath. Downloading alternative voices from this repository will fail (404/silent error). To use other voices (e.g. `af_bella`, `am_michael`, `ff_siwis`, `ef_dora`, etc.), they must be manually downloaded from the `onnx-community/Kokoro-82M-v1.0-ONNX` repository under `resolve/main/voices/<voice>.bin` and placed in `~/.cache/fluidaudio/Models/kokoro-82m-coreml/ANE/<voice>.bin`.
 
 This matters because the developer's firewall (Little Snitch) blocks the HuggingFace **Xet CDN**, which breaks fresh downloads — an already-cached model still loads.
 
