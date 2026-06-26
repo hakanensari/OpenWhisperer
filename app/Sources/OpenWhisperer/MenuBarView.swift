@@ -961,7 +961,8 @@ struct MenuBarView: View {
     private var footerSection: some View {
         OWCard {
             VStack(alignment: .leading, spacing: 8) {
-                // Permissions
+                OWCardHeader(title: "Permissions Required", icon: "lock.shield")
+
                 ModernDiagnosticRow(label: "Accessibility", ok: accessibilityManager.isGranted)
                     .contentShape(Rectangle())
                     .onTapGesture {
