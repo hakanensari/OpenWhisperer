@@ -141,9 +141,10 @@ Claude Code supports HTTP/SSE MCP, and **so does Antigravity** (remote servers v
 a `serverUrl` field in `mcp_config.json`) — correcting the earlier "agy has no
 HTTP MCP" note, which was a bad design-phase check. The one unverified case is
 whether agy accepts a **plain-loopback `http://localhost:8000`** `serverUrl` (its
-documented examples are all remote `https://` with auth headers); Codex HTTP-MCP
-support is still unconfirmed. So B is **Claude-Code-first but not Claude-only** —
-the spike should confirm agy's loopback case. The earlier race argument for stdio
+documented examples are all remote `https://` with auth headers). **Codex HTTP-MCP
+is confirmed working** (Codex 0.142, no experimental flag — see Spike results). So B
+reaches **Claude Code and Codex** today (Antigravity likely); the spike only leaves
+agy's loopback case open. The earlier race argument for stdio
 is moot (the tool no longer touches `voice_turn`).
 
 ### Port
@@ -240,7 +241,28 @@ defensible. The fallback is nonetheless cheap insurance — have the `speak` too
 a `spoke_early` marker and the Stop hook skip when present — guaranteeing speech
 over the still-unproven interactive long-turn case for one release, then delete it
 in a follow-up. Recommended but no longer load-bearing; a safety/KISS trade to
-settle at planning.
+settle at planning. **Decided: KISS (delete, no fallback).**
+
+### Codex spike (2026-06-26) — Codex also works (scope expanded to both platforms)
+
+Codex CLI 0.142 has caught up since this spec was written, so Codex was spiked too:
+- **Q1 (transport + invocation):** `codex exec -c mcp_servers.OpenWhisperer.url=…` connected to
+  the same in-app server (`http://localhost:8000/mcp`) and called `speak` — **no experimental flag
+  needed.** Disproves the old "Codex unconfirmed" note.
+- **Q2 (nudge adherence):** a `UserPromptSubmit` command hook (Codex's I/O schema is **identical**
+  to Claude Code's — input `{prompt, session_id, hook_event_name, …}`, output
+  `{hookSpecificOutput:{additionalContext}}`) drove **5/5** speak-first turns.
+- **Big simplification:** because Codex's `UserPromptSubmit` stdin carries both `prompt` and
+  `session_id`, **the same `voice-context.sh` serves both platforms unchanged** — the old "Codex
+  has no per-prompt session id" limitation is gone.
+- **One deployment caveat — hook trust.** Codex silently skips *untrusted* hooks; the spike used
+  `--dangerously-bypass-hook-trust` (per-invocation, unusable in production). The Codex setup must
+  establish **persisted hook trust** (one-time user approval, or written by the app). This is the
+  single open detail for the Codex migration.
+
+**Scope:** the implementation now covers **both** Claude Code and Codex — delete the Stop hook
+(`tts-hook.sh`) *and* the Codex `notify` hook (`codex-tts-hook.sh`), both replaced by the shared
+`voice-context.sh` nudge + the `speak` tool.
 
 ## Rollout
 
@@ -253,8 +275,8 @@ settle at planning.
 - Model doesn't call `speak` first → silent turn. No fallback, by choice. **Now
   applies to all three response modes** (the Stop hook that used to guarantee
   speech in `text`/`always` is gone).
-- HTTP-MCP support keeps reach Claude-Code-first; Antigravity likely works (remote
-  HTTP confirmed, loopback plain-HTTP unverified), Codex unconfirmed.
+- HTTP-MCP reach: **Claude Code and Codex both confirmed working**; Antigravity
+  likely (remote HTTP confirmed, loopback plain-HTTP unverified).
 
 ## Open questions for planning
 
