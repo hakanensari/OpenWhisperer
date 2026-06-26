@@ -1,6 +1,7 @@
 import AppKit
 import SwiftUI
 import ServiceManagement
+import OpenWhispererKit
 
 // MARK: - Design Tokens
 
@@ -75,6 +76,7 @@ struct MenuBarView: View {
     @State private var focusAppName = ""
     @State private var focusSelection = "Code"  // visual default; only written on explicit toggle
     @State private var customFocusApp = ""
+    @State private var installedApps: [AppEntry] = []
     @State private var saveDebounce: DispatchWorkItem?
     @State private var selectedPTTKey = "ctrl"
     @State private var selectedMode: InteractionMode = .holdToTalk
@@ -83,6 +85,7 @@ struct MenuBarView: View {
     @State private var selectedVoice = "af_heart"
     @State private var selectedLanguage = "en"
     @State private var selectedStyle = "normal"
+    @State private var selectedResponse = "voice"
     @State private var showStoppedBanner = false
     @State private var pttKeyChanged = false
     @State private var selectedPlatform: Platform = .claudeCode
@@ -136,6 +139,14 @@ struct MenuBarView: View {
         ("normal", "Normal"),
         ("rich", "Rich"),
         ("full", "Full"),
+    ]
+
+    // When replies are spoken. "voice" (default) = only dictated turns; matches
+    // the tts_response_mode values read by voice-context.sh / codex-tts-hook.sh.
+    private static let responseModes: [(id: String, label: String)] = [
+        ("voice", "when Voice"),
+        ("text", "when Text"),
+        ("always", "Always"),
     ]
 
     private static let volumeLevels: [(id: String, label: String, value: String)] = [
@@ -203,19 +214,36 @@ struct MenuBarView: View {
         .background(OWWindowBackground())
         .onAppear {
             selectedPlatform = Platform.load()
-            launchAtLogin = SMAppService.mainApp.status == .enabled
+            // SMAppService.mainApp.status is a synchronous XPC call to launchservicesd and
+            // can block the main thread for seconds (freezing the menu). Resolve it off the
+            // main thread and assign the flag back on main.
+            DispatchQueue.global(qos: .userInitiated).async {
+                let enabled = SMAppService.mainApp.status == .enabled
+                DispatchQueue.main.async { launchAtLogin = enabled }
+            }
             autoSubmit = FileManager.default.fileExists(atPath: Paths.autoSubmitFlag.path)
             autoFocusEnabled = FileManager.default.fileExists(atPath: Paths.autoFocusApp.path)
             autoFocusReturn = FileManager.default.fileExists(atPath: Paths.autoFocusReturn.path)
+            if installedApps.isEmpty {
+                DispatchQueue.global(qos: .userInitiated).async {
+                    let apps = InstalledApps.all()
+                    DispatchQueue.main.async { installedApps = apps }
+                }
+            }
             if let saved = try? String(contentsOf: Paths.autoFocusApp, encoding: .utf8),
                !saved.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                let name = saved.trimmingCharacters(in: .whitespacesAndNewlines)
-                focusAppName = name
-                if Self.focusApps.contains(where: { $0.id == name }) {
-                    focusSelection = name
-                } else {
-                    focusSelection = "CUSTOM"
-                    customFocusApp = name
+                let value = saved.trimmingCharacters(in: .whitespacesAndNewlines)
+                focusAppName = value
+                switch FocusTarget.parse(value) {
+                case .bundleID(let bid):
+                    focusSelection = bid              // installed-app pick ("bundleid:" tagged)
+                case .name(let name):
+                    if Self.focusApps.contains(where: { $0.id == name }) {
+                        focusSelection = name         // curated favorite
+                    } else {
+                        focusSelection = "CUSTOM"
+                        customFocusApp = name         // typed custom name (or legacy value)
+                    }
                 }
             }
             if let savedKey = try? String(contentsOf: Paths.pttHotkey, encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines),
@@ -242,6 +270,13 @@ struct MenuBarView: View {
                 let style = savedStyle.trimmingCharacters(in: .whitespacesAndNewlines)
                 if Self.styleLevels.contains(where: { $0.id == style }) {
                     selectedStyle = style
+                }
+            }
+            if let savedResponse = try? String(contentsOf: Paths.ttsResponseMode, encoding: .utf8),
+               !savedResponse.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                let mode = savedResponse.trimmingCharacters(in: .whitespacesAndNewlines)
+                if Self.responseModes.contains(where: { $0.id == mode }) {
+                    selectedResponse = mode
                 }
             }
             if let savedVolume = try? String(contentsOf: Paths.ttsVolume, encoding: .utf8),
@@ -526,14 +561,32 @@ struct MenuBarView: View {
 
                 OWInternalDivider()
 
-                OWPickerRow(label: "Style", labelWidth: 52) {
-                    OWMenuPicker(selection: $selectedStyle, options: Self.styleLevels)
-                        .frame(maxWidth: .infinity)
+                // Style (spoken summary length) + Response (when replies are spoken),
+                // two compact dropdowns sharing one row.
+                HStack(alignment: .center, spacing: 12) {
+                    HStack(spacing: 5) {
+                        Text("Style")
+                            .font(OWFont.body(11))
+                            .foregroundColor(OWColor.ink)
+                        OWMenuPicker(selection: $selectedStyle, options: Self.styleLevels)
+                            .frame(maxWidth: .infinity)
+                    }
+                    .onChange(of: selectedStyle) { _, newValue in
+                        try? newValue.write(to: Paths.ttsStyle, atomically: true, encoding: .utf8)
+                    }
+
+                    HStack(spacing: 5) {
+                        Text("Response")
+                            .font(OWFont.body(11))
+                            .foregroundColor(OWColor.ink)
+                        OWMenuPicker(selection: $selectedResponse, options: Self.responseModes)
+                            .frame(maxWidth: .infinity)
+                    }
+                    .onChange(of: selectedResponse) { _, newValue in
+                        try? newValue.write(to: Paths.ttsResponseMode, atomically: true, encoding: .utf8)
+                    }
                 }
-                .help("Spoken summary length — shapes the voice nudge injected by the hook")
-                .onChange(of: selectedStyle) { _, newValue in
-                    try? newValue.write(to: Paths.ttsStyle, atomically: true, encoding: .utf8)
-                }
+                .help("Style = spoken summary length. Response = when replies are spoken: when Voice (dictated), when Text (typed), or Always. Text/Always also shape typed replies for speech (summary-first).")
 
                 OWInternalDivider()
 
@@ -591,55 +644,77 @@ struct MenuBarView: View {
                     }
                 }
 
-                // Auto-focus sub-options
+                // Auto-focus sub-options — nested under the auto-focus toggle,
+                // shown only while auto-focus is on.
                 if autoFocusEnabled {
                     OWInternalDivider()
 
-                    OWMenuPicker(selection: $focusSelection, options: Self.focusApps)
-                        .frame(maxWidth: .infinity)
-                    .onChange(of: focusSelection) { _, newValue in
-                        if newValue == "CUSTOM" {
-                            focusAppName = customFocusApp
-                        } else {
-                            focusAppName = newValue
+                    VStack(alignment: .leading, spacing: 8) {
+                        OWAppPicker(
+                            selection: $focusSelection,
+                            favorites: Self.focusApps.filter { $0.id != "CUSTOM" }
+                                .map { AppEntry(bundleID: $0.id, name: $0.label) },
+                            installed: installedApps
+                        ) { id in
+                            if id == "CUSTOM" {
+                                focusAppName = customFocusApp
+                            } else if installedApps.contains(where: { $0.bundleID == id }) {
+                                focusAppName = FocusTarget.tag(bundleID: id)   // installed pick
+                            } else {
+                                focusAppName = id                             // curated favorite
+                            }
+                            saveFocusApp()
                         }
-                        saveFocusApp()
-                    }
+                        .frame(maxWidth: .infinity)
 
-                    if focusSelection == "CUSTOM" {
-                        TextField("App name", text: $customFocusApp)
-                            .textFieldStyle(.roundedBorder)
-                            .font(OWFont.body(12))
-                            .onChange(of: customFocusApp) { _, newValue in
-                                if !newValue.isEmpty {
-                                    focusAppName = newValue
-                                    debouncedSaveFocusApp()
+                        if focusSelection == "CUSTOM" {
+                            TextField("App name", text: $customFocusApp)
+                                .textFieldStyle(.roundedBorder)
+                                .font(OWFont.body(12))
+                                .onChange(of: customFocusApp) { _, newValue in
+                                    if !newValue.isEmpty {
+                                        focusAppName = newValue
+                                        debouncedSaveFocusApp()
+                                    }
+                                }
+                        }
+
+                        OWCheckbox(label: "with return", isOn: $autoFocusReturn)
+                            .onChange(of: autoFocusReturn) { _, enabled in
+                                if enabled {
+                                    try? "on".write(to: Paths.autoFocusReturn, atomically: true, encoding: .utf8)
+                                } else {
+                                    try? FileManager.default.removeItem(at: Paths.autoFocusReturn)
                                 }
                             }
                     }
-
-                    OWCheckbox(label: "with return", isOn: $autoFocusReturn)
-                        .onChange(of: autoFocusReturn) { _, enabled in
-                            if enabled {
-                                try? "on".write(to: Paths.autoFocusReturn, atomically: true, encoding: .utf8)
-                            } else {
-                                try? FileManager.default.removeItem(at: Paths.autoFocusReturn)
-                            }
-                        }
-
-                    Text("focus target app, insert text, return to previous")
-                        .font(OWFont.caption())
-                        .foregroundColor(.secondary)
+                    .padding(.leading, 6)
                 }
 
-                // Auto-submit hint
-                if autoSubmit {
-                    Text("enter is auto-applied after text insertion")
+                // Behavior hint — reflects the active auto-focus / with-return /
+                // auto-submit combination.
+                if let hint = automationHint {
+                    Text(hint)
                         .font(OWFont.caption())
                         .foregroundColor(.secondary)
                 }
             }
         }
+    }
+
+    /// One-line description of what a dictation will do, given the active
+    /// Automation toggles. Nil when no automation is on.
+    private var automationHint: String? {
+        if autoFocusEnabled {
+            var steps = ["focus target app", "insert text"]
+            if autoSubmit { steps.append("press enter") }
+            if autoFocusReturn { steps.append("return to previous") }
+            return steps.joined(separator: ", ")
+        }
+        if autoSubmit {
+            return "enter is auto-applied after text insertion"
+        }
+        return nil
     }
 
     // MARK: - Setup Card
@@ -1202,6 +1277,135 @@ struct OWMenuPicker<T: Hashable>: View {
 
     private var currentLabel: String {
         options.first(where: { $0.id == selection })?.label ?? ""
+    }
+}
+
+// MARK: - OWAppPicker (searchable picker: favorites + every installed app)
+
+/// Like `OWMenuPicker`, but backs a long, searchable list. The collapsed control
+/// shows the current selection; tapping it opens a popover with a search field,
+/// a "Favorites" section (the curated dev/terminal apps), an "Installed apps"
+/// section (everything found on disk, type-to-filter), and a "Custom…" escape.
+///
+/// `selection` carries: a favorite id (its name), an installed app's bundle id,
+/// or `"CUSTOM"`. `onSelect` fires with that id after a pick.
+struct OWAppPicker: View {
+    @Binding var selection: String
+    let favorites: [AppEntry]   // bundleID holds the favorite's id (a display name)
+    let installed: [AppEntry]
+    let onSelect: (String) -> Void
+
+    @State private var showPopover = false
+    @State private var query = ""
+
+    var body: some View {
+        Button {
+            showPopover.toggle()
+        } label: {
+            HStack(spacing: 4) {
+                Text(currentLabel)
+                    .font(OWFont.body(11))
+                    .foregroundColor(OWColor.ink)
+                    .lineLimit(1)
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.system(size: 8, weight: .medium))
+                    .foregroundColor(OWColor.accent.opacity(0.6))
+            }
+            .padding(.horizontal, 7)
+            .padding(.vertical, 5)
+            .background(
+                RoundedRectangle(cornerRadius: 5, style: .continuous)
+                    .fill(OWColor.pickerBg)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 5, style: .continuous)
+                            .strokeBorder(OWColor.checkboxBorder, lineWidth: 1)
+                    )
+            )
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .popover(isPresented: $showPopover, arrowEdge: .bottom) {
+            VStack(alignment: .leading, spacing: 6) {
+                TextField("Search apps…", text: $query)
+                    .textFieldStyle(.roundedBorder)
+                    .font(OWFont.body(12))
+
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 1) {
+                        if !filteredFavorites.isEmpty {
+                            header("Favorites")
+                            ForEach(filteredFavorites, id: \.bundleID) { fav in
+                                row(id: fav.bundleID, label: fav.name)
+                            }
+                        }
+                        if !filteredApps.isEmpty {
+                            header("Installed apps")
+                            ForEach(filteredApps, id: \.bundleID) { app in
+                                row(id: app.bundleID, label: app.name)
+                            }
+                        }
+                        Divider().padding(.vertical, 3)
+                        row(id: "CUSTOM", label: "Custom…")
+                    }
+                    .padding(.vertical, 2)
+                }
+                .frame(width: 240, height: 250)
+            }
+            .padding(8)
+            .background(OWColor.page)
+        }
+    }
+
+    private var filteredApps: [AppEntry] {
+        AppFilter.match(installed, query: query)
+    }
+
+    private var filteredFavorites: [AppEntry] {
+        AppFilter.match(favorites, query: query)
+    }
+
+    private var currentLabel: String {
+        if selection == "CUSTOM" { return "Custom…" }
+        if let fav = favorites.first(where: { $0.bundleID == selection }) { return fav.name }
+        if let app = installed.first(where: { $0.bundleID == selection }) { return app.name }
+        return selection.isEmpty ? "Select app…" : selection
+    }
+
+    private func header(_ title: String) -> some View {
+        Text(title.uppercased())
+            .font(OWFont.body(9))
+            .foregroundColor(OWColor.ink.opacity(0.5))
+            .padding(.top, 4)
+            .padding(.horizontal, 6)
+            .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func row(id: String, label: String) -> some View {
+        Button {
+            selection = id
+            onSelect(id)
+            query = ""
+            showPopover = false
+        } label: {
+            HStack(spacing: 5) {
+                Image(systemName: "checkmark")
+                    .font(.system(size: 9, weight: .bold))
+                    .frame(width: 12)
+                    .foregroundColor(OWColor.accent)
+                    .opacity(id == selection ? 1 : 0)
+                Text(label)
+                    .font(OWFont.body(12))
+                    .foregroundColor(OWColor.ink)
+                    .lineLimit(1)
+                Spacer(minLength: 0)
+            }
+            .padding(.vertical, 3)
+            .padding(.horizontal, 6)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 }
 

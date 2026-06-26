@@ -12,6 +12,8 @@ struct KitTestRunner {
         failures += voiceMigrationFailures()
         failures += numberNormalizerFailures()
         failures += sentenceSplitterFailures()
+        failures += appFilterFailures()
+        failures += focusTargetFailures()
 
         if failures.isEmpty {
             print("✅ OpenWhispererKit: all checks passed")

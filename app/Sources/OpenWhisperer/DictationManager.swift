@@ -718,19 +718,25 @@ class DictationManager: ObservableObject {
     /// If Auto-Focus is enabled, find the PID of the configured app.
     /// Returns nil if Auto-Focus is not enabled or app isn't running.
     private func resolveAutoFocusPID() -> pid_t? {
-        guard let name = try? String(contentsOf: Paths.autoFocusApp, encoding: .utf8)
+        guard let value = try? String(contentsOf: Paths.autoFocusApp, encoding: .utf8)
             .trimmingCharacters(in: .whitespacesAndNewlines),
-              !name.isEmpty else { return nil }
-        // Find running app by name
+              !value.isEmpty else { return nil }
         let apps = NSWorkspace.shared.runningApplications
-        if let app = apps.first(where: { $0.localizedName == name }) {
-            return app.processIdentifier
+        switch FocusTarget.parse(value) {
+        case .bundleID(let bid):
+            // Installed-app pick — match by bundle identifier (robust, locale-independent).
+            return apps.first(where: { $0.bundleIdentifier == bid })?.processIdentifier
+        case .name(let name):
+            // Curated favorites + custom + legacy values store the display name.
+            if let app = apps.first(where: { $0.localizedName == name }) {
+                return app.processIdentifier
+            }
+            // Bundle-name prefix (e.g. "Code" matches "Code - Insiders") (#17)
+            if let app = apps.first(where: { ($0.localizedName ?? "").hasPrefix(name) }) {
+                return app.processIdentifier
+            }
+            return nil
         }
-        // Try matching by bundle name prefix (e.g. "Code" matches "Code - Insiders") (#17)
-        if let app = apps.first(where: { ($0.localizedName ?? "").hasPrefix(name) }) {
-            return app.processIdentifier
-        }
-        return nil
     }
 
     // MARK: - AXUIElement Text Insertion
