@@ -33,10 +33,11 @@ enum ConfigManager {
 
     static func showClaudeSettingsInstructions() {
         let hookPath = Paths.ttsHook.path
+        let upsPath = Paths.voiceContextHook.path
         let window = InstructionWindow(
-            title: "Step 1: Claude Code Hook (settings.json)",
+            title: "Claude Code Hooks (settings.json)",
             instructions: """
-            Add the TTS hook to your Claude Code settings:
+            Open Whisperer uses two Claude Code hooks. Auto-Apply writes both for you; do this only if you prefer to edit settings by hand.
 
             1. Open ~/.claude/settings.json
                (or your project's .claude/settings.json)
@@ -45,6 +46,12 @@ enum ConfigManager {
 
             {
               "hooks": {
+                "UserPromptSubmit": [{
+                  "hooks": [{
+                    "type": "command",
+                    "command": "\(upsPath)"
+                  }]
+                }],
                 "Stop": [{
                   "hooks": [{
                     "type": "command",
@@ -56,7 +63,11 @@ enum ConfigManager {
               }
             }
 
-            This makes Claude speak every response aloud.
+            UserPromptSubmit (voice-context.sh) marks each turn and, when it should be spoken, nudges the reply to open with a short spoken summary. Stop (tts-hook.sh) then speaks that reply.
+
+            By default only voice-dictated turns are spoken (Response mode 'voice'); typed turns stay silent. Change this with the Response setting (text = speak typed turns; always = speak every turn).
+
+            The Auto-Apply button writes both hooks automatically, and updates them on rebuild.
             """
         )
         window.show()
@@ -180,9 +191,9 @@ enum ConfigManager {
     static func showCodexConfigInstructions() {
         let hookPath = Paths.codexTtsHook.path
         let window = InstructionWindow(
-            title: "Step 1: Codex CLI Hook (config.toml)",
+            title: "Codex CLI Hook (config.toml)",
             instructions: """
-            Add the TTS notify hook to your Codex CLI config:
+            Open Whisperer speaks Codex replies via a notify hook. Auto-Apply writes this for you; do this only if you prefer to edit the config by hand.
 
             1. Open ~/.codex/config.toml
                (create it if it doesn't exist)
@@ -191,8 +202,9 @@ enum ConfigManager {
 
             notify = ["\(hookPath)"]
 
-            This makes Codex speak every response aloud
-            via the local TTS server.
+            By default only voice-dictated turns are spoken; typed turns stay silent. Change this with the Response setting (text = typed turns only; always = every turn).
+
+            The Auto-Apply button writes (or updates) this line automatically.
             """
         )
         window.show()
