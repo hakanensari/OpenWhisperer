@@ -212,31 +212,35 @@ Ran on branch `worktree-speak-mcp-spike`: a pure, unit-tested `MCPServer`
   verified the whole JSON-RPC surface (initialize / notifications / tools/list /
   tools/call / errors).
 
-**Q2 — first-call adherence: 10/10 turns called `speak`, zero silent.**
+**Q2 — adherence: 13/13 turns called `speak`, zero silent.**
 Nudge delivered through the production channel (a throwaway UserPromptSubmit hook
 emitting `additionalContext`), measured with `claude -p --output-format stream-json`:
 - **Conversational turns (6/6):** `speak` fired *before* any on-screen text — the
   full early-start win. Summaries were clean and standalone.
-- **Investigation/code turns (4/4):** the model Grepped/Read first, *then* spoke,
-  *then* wrote the reply. Speaking after gathering is correct (can't summarize
-  unknown findings) — audio still leads the text, but the head-start shrinks to
-  roughly what a Stop hook would have given.
-- **Adherence (called `speak` at all): 10/10** — the single most important number
-  for the no-fallback design. The "silent turn" risk looks low.
+- **Narrow "check the source" turns (4/4):** told to verify first, the model
+  Grepped/Read *then* spoke *then* wrote — audio still leads the text, but the
+  head-start shrinks to roughly what a Stop hook would have given.
+- **Long multi-step research turns (3/3):** the model spoke a confident high-level
+  summary *first* (from prior knowledge), *then* did 5–12 reads to write the
+  detailed reply. Ideal early-start even on long turns — with one caveat: that
+  first summary is a *prediction made before the work*, so on a turn where the
+  model's prior belief is wrong it could speak a gist the written reply then
+  corrects. (A content-quality risk, not a silent-turn one.)
+- **Adherence (called `speak` at all): 13/13** — the single most important number
+  for the no-fallback design. The "silent turn" risk looks low across short *and*
+  long turns.
 
-**Untested gap (the important one):** long *interactive* agentic turns — a real
-coding task with many tool calls over minutes — were **not** exercised. That is the
-app's dominant case *and* where the early-start benefit is weakest (most wall-clock
-is spent before there's anything to summarize) *and* where adherence is least
-proven. Validate this before deleting the Stop hooks.
+**Remaining gap:** a headless *research* proxy for long turns passed (3/3 above),
+but real *interactive* coding turns — many edits/tool calls over minutes in an
+actual session — were **not** exercised. Adherence there is now *likely* fine
+(13/13 overall) but not proven; validate in real use.
 
-**Implication for rollout (see Accepted risks):** the spike supports the design,
-but given the untested dominant case, consider shipping v1.6.0 with the Stop hook
-**retained as a deduplicated fallback** (the `speak` tool sets a `spoke_early`
-marker; the Stop hook skips when present) rather than deleting it outright — then
-remove the fallback in a follow-up once real-world adherence on long turns is
-confirmed. This re-adds a little of the machinery the design wanted to kill; it is
-a deliberate safety/KISS trade to decide at planning.
+**Implication for rollout (see Accepted risks):** 13/13 makes the KISS deletion
+defensible. The fallback is nonetheless cheap insurance — have the `speak` tool set
+a `spoke_early` marker and the Stop hook skip when present — guaranteeing speech
+over the still-unproven interactive long-turn case for one release, then delete it
+in a follow-up. Recommended but no longer load-bearing; a safety/KISS trade to
+settle at planning.
 
 ## Rollout
 
