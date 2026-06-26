@@ -537,7 +537,7 @@ struct MenuBarView: View {
             EmptyView()
         } expandedContent: {
             VStack(alignment: .leading, spacing: 10) {
-                OWPickerRow(label: "Dictate", labelWidth: 52) {
+                OWPickerRow(label: "Dictate in", labelWidth: 62) {
                     OWMenuPicker(selection: $selectedLanguage, options: Self.languages)
                         .frame(maxWidth: .infinity)
                 }
@@ -551,7 +551,7 @@ struct MenuBarView: View {
 
                 OWInternalDivider()
 
-                OWPickerRow(label: "Voice", labelWidth: 52) {
+                OWPickerRow(label: "Voice", labelWidth: 62) {
                     OWMenuPicker(selection: $selectedVoice, options: Self.voices)
                         .frame(maxWidth: .infinity)
                 }
@@ -561,32 +561,28 @@ struct MenuBarView: View {
 
                 OWInternalDivider()
 
-                // Style (spoken summary length) as a compact, unlabeled dropdown +
-                // Response (when replies are spoken) labeled, sharing one row.
-                HStack(alignment: .center, spacing: 12) {
-                    OWMenuPicker(selection: $selectedStyle, options: Self.styleLevels)
-                        .frame(width: 92)
-                        .onChange(of: selectedStyle) { _, newValue in
-                            try? newValue.write(to: Paths.ttsStyle, atomically: true, encoding: .utf8)
-                        }
-
-                    HStack(spacing: 5) {
-                        Text("Response")
-                            .font(OWFont.body(11))
-                            .foregroundColor(OWColor.ink)
+                // Both dropdowns are Response settings: spoken-summary length (left)
+                // + when replies are spoken (right). One "Response" label, formatted
+                // like the other rows.
+                OWPickerRow(label: "Response", labelWidth: 62) {
+                    HStack(spacing: 8) {
+                        OWMenuPicker(selection: $selectedStyle, options: Self.styleLevels)
+                            .frame(maxWidth: .infinity)
+                            .onChange(of: selectedStyle) { _, newValue in
+                                try? newValue.write(to: Paths.ttsStyle, atomically: true, encoding: .utf8)
+                            }
                         OWMenuPicker(selection: $selectedResponse, options: Self.responseModes)
                             .frame(maxWidth: .infinity)
-                    }
-                    .frame(maxWidth: .infinity)
-                    .onChange(of: selectedResponse) { _, newValue in
-                        try? newValue.write(to: Paths.ttsResponseMode, atomically: true, encoding: .utf8)
+                            .onChange(of: selectedResponse) { _, newValue in
+                                try? newValue.write(to: Paths.ttsResponseMode, atomically: true, encoding: .utf8)
+                            }
                     }
                 }
-                .help("Left: spoken summary length (Terse/Normal/Rich/Full). Response: when replies are spoken — when Voice (dictated, the default), when Text (typed), or Always.")
+                .help("Both are Response settings — left: spoken summary length (Terse/Normal/Rich/Full); right: when replies are spoken (when Voice / when Text / Always).")
 
                 OWInternalDivider()
 
-                OWPickerRow(label: "Volume", labelWidth: 52) {
+                OWPickerRow(label: "Volume", labelWidth: 62) {
                     OWMenuPicker(selection: $selectedVolume, options: Self.volumeLevels.map { (id: $0.id, label: $0.label) })
                         .frame(maxWidth: .infinity)
                 }
