@@ -548,7 +548,7 @@ struct MenuBarView: View {
         OWCollapsibleCard(
             title: "Voice Settings",
             icon: "slider.horizontal.3",
-            help: "Dictation language, the voice that reads replies aloud, and Response — how much of a reply is spoken, and when.",
+            help: "Dictation language, the voice that reads replies aloud, how fast it's read, and Response — how much of a reply is spoken, and when.",
             expanded: $voiceSettingsExpanded
         ) {
             EmptyView()
@@ -598,7 +598,7 @@ struct MenuBarView: View {
                         .write(to: Paths.ttsSpeed, atomically: true, encoding: .utf8)
                 }
 
-                // No visible separator between Voice and Response, but keep the same
+                // No visible separator between Speed and Response, but keep the same
                 // gap (the divider was 0.5pt) so the rows don't move closer.
                 Color.clear.frame(height: 0.5)
 
