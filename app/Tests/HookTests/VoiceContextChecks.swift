@@ -214,5 +214,21 @@ func voiceContextFailures() -> [String] {
         if n?.contains("bilingual") != true { fail("terseFrenchCompose: flavor missing") }
     }
 
+    // 21) English-UK voice (b-prefix) → NO flavor addendum (the a/b → English rule).
+    do {
+        let s = newSandbox()
+        s.writeVoiceTurn(forPrompt: "go"); s.writeTtsVoice("bf_alice")
+        let r = Hook.run("voice-context.sh", stdin: input(prompt: "go", session: "s1"), sandbox: s)
+        if nudge(r.stdout)?.contains("bilingual") == true { fail("ukEnglishNoFlavor: unexpected addendum") }
+    }
+
+    // 22) a different non-English branch (Italian) → its language named.
+    do {
+        let s = newSandbox()
+        s.writeVoiceTurn(forPrompt: "go"); s.writeTtsVoice("if_sara")
+        let r = Hook.run("voice-context.sh", stdin: input(prompt: "go", session: "s1"), sandbox: s)
+        if nudge(r.stdout)?.contains("Italian") != true { fail("italianFlavor: \(nudge(r.stdout)?.debugDescription ?? "nil")") }
+    }
+
     return failures
 }
