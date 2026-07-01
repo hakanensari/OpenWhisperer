@@ -204,5 +204,15 @@ func voiceContextFailures() -> [String] {
         if nudge(r.stdout)?.contains("bilingual") == true { fail("noVoiceNoFlavor: unexpected addendum") }
     }
 
+    // 20) flavor composes with a non-default length style: terse + a French voice → both present.
+    do {
+        let s = newSandbox()
+        s.writeVoiceTurn(forPrompt: "go"); s.writeTtsVoice("ff_siwis"); s.writeTtsStyle("terse")
+        let r = Hook.run("voice-context.sh", stdin: input(prompt: "go", session: "s1"), sandbox: s)
+        let n = nudge(r.stdout)
+        if n?.contains("one short, plain spoken sentence") != true { fail("terseFrenchCompose: terse length lost") }
+        if n?.contains("bilingual") != true { fail("terseFrenchCompose: flavor missing") }
+    }
+
     return failures
 }
