@@ -1382,6 +1382,65 @@ struct OWMenuPicker<T: Hashable>: View {
     }
 }
 
+// MARK: - OWGroupedMenuPicker (OWMenuPicker with one nested submenu per group)
+
+/// Like `OWMenuPicker`, but renders `groups` as nested submenus (a `Menu` per
+/// group) so a long option list (e.g. ~50 voices) stays navigable instead of one
+/// flat scroll. Same collapsed control/styling as `OWMenuPicker`.
+struct OWGroupedMenuPicker<T: Hashable>: View {
+    @Binding var selection: T
+    let groups: [(group: String, options: [(id: T, label: String)])]
+
+    var body: some View {
+        Menu {
+            ForEach(groups, id: \.group) { group in
+                Menu(group.group) {
+                    ForEach(group.options, id: \.id) { option in
+                        Button {
+                            selection = option.id
+                        } label: {
+                            if option.id == selection {
+                                Label(option.label, systemImage: "checkmark")
+                            } else {
+                                Text(option.label)
+                            }
+                        }
+                    }
+                }
+            }
+        } label: {
+            HStack(spacing: 4) {
+                Text(currentLabel)
+                    .font(OWFont.body(11))
+                    .foregroundColor(OWColor.ink)
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.system(size: 8, weight: .medium))
+                    .foregroundColor(OWColor.accent.opacity(0.6))
+            }
+            .padding(.horizontal, 7)
+            .padding(.vertical, 5)
+            .background(
+                RoundedRectangle(cornerRadius: 5, style: .continuous)
+                    .fill(OWColor.pickerBg)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 5, style: .continuous)
+                            .strokeBorder(OWColor.checkboxBorder, lineWidth: 1)
+                    )
+            )
+        }
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+    }
+
+    private var currentLabel: String {
+        for g in groups {
+            if let m = g.options.first(where: { $0.id == selection }) { return m.label }
+        }
+        return ""
+    }
+}
+
 // MARK: - OWAppPicker (searchable picker: favorites + every installed app)
 
 /// Like `OWMenuPicker`, but backs a long, searchable list. The collapsed control
