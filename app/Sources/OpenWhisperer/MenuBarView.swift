@@ -582,6 +582,7 @@ struct MenuBarView: View {
 
                 OWPickerRow(label: "Speed", labelWidth: 62) {
                     HStack(spacing: 8) {
+                        // Bounds MUST equal TTSSpeed.min/max (see TTSSpeed.swift).
                         Slider(value: $selectedSpeed, in: 0.7...1.5, step: 0.05)
                             .tint(OWColor.accent)
                             .help("How fast replies are read aloud. 1× is the default Kokoro rate; higher is faster. Spoken output only.")

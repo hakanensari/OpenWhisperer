@@ -110,7 +110,9 @@ final class TTSHTTPServer {
             let json = try? JSONSerialization.jsonObject(with: req.body) as? [String: Any]
             let input = json?["input"] as? String ?? ""
             let voice = json?["voice"] as? String ?? Self.userVoice()
-            let speed = (json?["speed"] as? Double).map { TTSSpeed.clamp(Float($0)) } ?? Self.userSpeed()
+            // Guard finiteness so a non-finite override can't slip a NaN past clamp into synthesis
+            // (JSON can't carry NaN/Inf today, but don't rely on the serializer for that safety).
+            let speed = (json?["speed"] as? Double).flatMap { $0.isFinite ? TTSSpeed.clamp(Float($0)) : nil } ?? Self.userSpeed()
             Task { [tts] in
                 do {
                     let wav = try await tts.synthesize(input, voice: voice, speed: speed)
