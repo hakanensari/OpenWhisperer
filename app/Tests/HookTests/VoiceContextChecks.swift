@@ -165,5 +165,44 @@ func voiceContextFailures() -> [String] {
         if !r.stdout.isEmpty { fail("unknownMode: expected silence, got \(r.stdout.debugDescription)") }
     }
 
+    // --- Native-tongue flavor addendum (keyed off tts_voice first char) ---
+
+    // 16) non-English voice (French) → nudge gains the flavor addendum naming the language.
+    do {
+        let s = newSandbox()
+        s.writeVoiceTurn(forPrompt: "go"); s.writeTtsVoice("ff_siwis")
+        let r = Hook.run("voice-context.sh", stdin: input(prompt: "go", session: "s1"), sandbox: s)
+        let n = nudge(r.stdout)
+        if n?.contains("French") != true { fail("frenchFlavor: missing 'French': \(n?.debugDescription ?? "nil")") }
+        if n?.contains("bilingual") != true { fail("frenchFlavor: missing addendum: \(n?.debugDescription ?? "nil")") }
+        if n?.contains("`speak` tool") != true { fail("frenchFlavor: base nudge lost") }
+    }
+
+    // 17) another non-English voice (Japanese) → its language named.
+    do {
+        let s = newSandbox()
+        s.writeVoiceTurn(forPrompt: "go"); s.writeTtsVoice("jf_alpha")
+        let r = Hook.run("voice-context.sh", stdin: input(prompt: "go", session: "s1"), sandbox: s)
+        if nudge(r.stdout)?.contains("Japanese") != true {
+            fail("japaneseFlavor: \(nudge(r.stdout)?.debugDescription ?? "nil")")
+        }
+    }
+
+    // 18) English voice (af_heart) → NO flavor addendum.
+    do {
+        let s = newSandbox()
+        s.writeVoiceTurn(forPrompt: "go"); s.writeTtsVoice("af_heart")
+        let r = Hook.run("voice-context.sh", stdin: input(prompt: "go", session: "s1"), sandbox: s)
+        if nudge(r.stdout)?.contains("bilingual") == true { fail("englishNoFlavor: unexpected addendum") }
+    }
+
+    // 19) no voice set → NO flavor addendum (safe default).
+    do {
+        let s = newSandbox()
+        s.writeVoiceTurn(forPrompt: "go")
+        let r = Hook.run("voice-context.sh", stdin: input(prompt: "go", session: "s1"), sandbox: s)
+        if nudge(r.stdout)?.contains("bilingual") == true { fail("noVoiceNoFlavor: unexpected addendum") }
+    }
+
     return failures
 }
